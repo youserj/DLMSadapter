@@ -1,0 +1,32 @@
+[build-system]
+requires = [
+    "setuptools",
+    "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[project]
+name = "DLMSAdapter"
+version = "0.1.1"
+authors = [
+    {name="Serj Kotilevski", email="youserj@outlook.com"}
+]
+dependencies = [
+    "DLMS-SPODES >= 0.76.6",
+]
+description="dlms-spodes"
+readme = "README.md"
+requires-python = ">=3.12"
+keywords=['dlms', 'spodes', 'adapter']
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+[project.urls]
+Source = "https://github.com/youserj/SPODESclient_prj"
+
+[project.scripts]
+DLMS_SPODES_client = "DLMS_SPODES_client:call_script"
