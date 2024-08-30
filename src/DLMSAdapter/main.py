@@ -44,3 +44,9 @@ class Adapter(ABC):
     @abstractmethod
     def get_template(self, name: str) -> Template:
         """load template by <name>"""
+
+
+class AdapterException(Exception):
+    """"""
+
+

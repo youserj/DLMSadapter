@@ -10,14 +10,10 @@ from DLMS_SPODES.cosem_interface_classes.association_ln.ver0 import ObjectListEl
 from DLMS_SPODES.cosem_interface_classes import implementations as impl, collection
 from DLMS_SPODES.version import AppVersion as SemVer
 from DLMS_SPODES import exceptions as exc
-from .main import Adapter
+from .main import Adapter, AdapterException
 
 
 logger = logging.getLogger(__name__)
-
-
-class AdapterException(Exception):
-    """"""
 
 
 root: Path = Path("..")
@@ -40,6 +36,7 @@ class Xml40(Adapter):
             self.keep_path.mkdir()
         if not self.template_path.exists():
             self.template_path.mkdir()
+
     @classmethod
     def get_version(cls) -> SemVer:
         return SemVer(4, 1)
@@ -274,7 +271,7 @@ class Xml40(Adapter):
                 value=cdt.OctetString(bytearray(r_n.findtext("server_ver").encode(encoding="ascii"))))
         )
         if r_n.tag != self._root_tag:
-            raise ValueError(F"ERROR: Root tag got {r_n.tag}, expected {self._root_tag}")
+            raise AdapterException(F"ERROR: Root tag got {r_n.tag}, expected {self._root_tag}")
         root_version: SemVer = SemVer.from_str(r_n.attrib.get('version', '1.0.0'))
         logger.info(F'Версия: {root_version}, {path=}')
         match root_version:
