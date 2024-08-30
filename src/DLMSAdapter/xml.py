@@ -16,7 +16,7 @@ from .main import Adapter, AdapterException
 logger = logging.getLogger(__name__)
 
 
-root: Path = Path("..")
+root: Path = Path(".")
 """root for file as example"""
 template_path = root / "Template"
 types_path = root / "Types"

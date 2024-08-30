@@ -1,7 +1,8 @@
 import unittest
 from DLMS_SPODES.cosem_interface_classes import collection
-from DLMS_SPODES.types import cdt
-from src import Xml40, get_manufactures_container
+from DLMS_SPODES.types import cdt, cst
+from src.DLMSAdapter import Xml40
+from src.DLMSAdapter.xml import get_manufactures_container
 import logging
 
 
@@ -79,8 +80,8 @@ class TestType(unittest.TestCase):
             template=collection.Template(
                 collections=[col, col2],
                 used={
-                    collection.OBIS(clock_obj.logical_name.contents): {3},
-                    collection.OBIS(act_cal.logical_name.contents): {9}
+                    clock_obj.logical_name: {3},
+                    act_cal.logical_name: {9}
                 }
             ))
         template = adapter.get_template("template_test1")

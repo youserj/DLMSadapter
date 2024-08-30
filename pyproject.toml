@@ -9,7 +9,7 @@ package-dir = {"" = "src"}
 
 [project]
 name = "DLMSAdapter"
-version = "0.1.2"
+version = "0.1.4"
 authors = [
     {name="Serj Kotilevski", email="youserj@outlook.com"}
 ]
