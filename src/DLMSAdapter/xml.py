@@ -445,7 +445,7 @@ class Xml40(Adapter):
                     object_node = ET.SubElement(
                         r_n,
                         "object",
-                        attrib={"ln": str(obj.logical_name)})
+                        attrib={"ln": obj.logical_name.get_report().msg})
                     for i in tuple(indexes):
                         attr = obj.get_attr(i)
                         if isinstance(attr, cdt.CommonDataType):
@@ -526,7 +526,7 @@ class Xml40(Adapter):
             case SemVer(4, 0 | 1):
                 for obj in r_n.findall('object'):
                     ln: str = obj.attrib.get("ln", 'is absence')
-                    obis = collection.OBIS.fromhex(ln)
+                    obis = cst.LogicalName.from_obis(ln)
                     objs: list[ic.COSEMInterfaceClasses] = list()
                     for col in cols:
                         if not col.is_in_collection(obis):
@@ -574,6 +574,7 @@ class Xml40(Adapter):
             verified=bool(int(r_n.findtext("verified", default="0"))))
 
 
+@lru_cache(1)
 def get_manufactures_container() -> dict[bytes, dict[bytes, dict[SemVer | cdt.CommonDataType, Path]]]:
     logger.info(F"create manufacturer configuration container")
     ret: dict[bytes, dict[bytes, dict[SemVer, Path]]] = dict()
@@ -607,12 +608,12 @@ def get_col_path(m: bytes, sid: ServerId, ver: ServerVersion) -> Path:
     """one recursion collection get way. ret: file, is_searched"""
     if (man := get_manufactures_container().get(m)) is None:
         raise AdapterException(F"no support manufacturer: {m}")
-    elif (sid := man.get(sid.value.encoding)) is None:
+    elif (server_id := man.get(sid.value.encoding)) is None:
         raise AdapterException(F"no support type {sid}, with manufacturer: {m}")
-    elif path := sid.get(ver.get_semver()):
+    elif path := server_id.get(ver.get_semver()):
         logger.info(F"got collection from library by path: {path}")
         return path
-    elif isinstance(semver := ver.get_semver(), SemVer) and (searched_version := semver.select_nearest(filter(lambda v: isinstance(v, SemVer), sid.keys()))):
-        return sid.get(searched_version)
+    elif isinstance(semver := ver.get_semver(), SemVer) and (searched_version := semver.select_nearest(filter(lambda v: isinstance(v, SemVer), server_id.keys()))):
+        return server_id.get(searched_version)
     else:
         raise AdapterException(F"no support version {ver} with manufacturer: {m}, identifier: {sid}")
