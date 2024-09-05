@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from DLMS_SPODES.cosem_interface_classes.collection import Collection, ServerId, ServerVersion, Template
-from DLMS_SPODES.version import AppVersion as SemVer
+from semver import Version as SemVer
 
 
 type_title: str = "DLMSServerType"
@@ -10,39 +10,42 @@ template_title: str = "DLMSServerTemplate"
 
 class Adapter(ABC):
     """universal adapter for keep/recovery DLMS data"""
+    VERSION: SemVer = SemVer(0, 0)
+    """reinit current adapter version"""
 
     @classmethod
     @abstractmethod
-    def get_version(cls) -> SemVer:
-        """:return current adapter version"""
-
-    @abstractmethod
-    def create_type(self, col: Collection):
+    def create_type(cls, col: Collection):
         """keep type from collection(source) to destination(file(xml, json,...), sql, etc...). Save all attributes. For types only STATIC save """
 
+    @classmethod
     @abstractmethod
-    def keep_data(self, col: Collection, ass_id: int = 3) -> bool:
+    def keep_data(cls, col: Collection, ass_id: int = 3) -> bool:
         """Save attributes WRITABLE and STATIC if possible. Use LDN as ID"""
 
+    @classmethod
     @abstractmethod
-    def get_data(self, col: Collection):
+    def get_data(cls, col: Collection):
         """ set attribute values from file by. validation ID's """
 
+    @classmethod
     @abstractmethod
-    def get_collection(self,
+    def get_collection(cls,
                        m: bytes,
                        sid: ServerId,
                        ver: ServerVersion) -> Collection:
         """get Collection by m: manufacturer, t: type, ver: version"""
 
+    @classmethod
     @abstractmethod
-    def create_template(self,
+    def create_template(cls,
                         name: str,
                         template: Template):
         """keep used values to template by collections with <name>"""
 
+    @classmethod
     @abstractmethod
-    def get_template(self, name: str) -> Template:
+    def get_template(cls, name: str) -> Template:
         """load template by <name>"""
 
 
