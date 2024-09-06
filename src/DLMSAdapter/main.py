@@ -1,5 +1,10 @@
 from abc import ABC, abstractmethod
-from DLMS_SPODES.cosem_interface_classes.collection import Collection, ServerId, ServerVersion, Template
+import asyncio
+from DLMS_SPODES.cosem_interface_classes.collection import (
+    Collection,
+    FirmwareID,
+    FirmwareVersion,
+    Template)
 from semver import Version as SemVer
 
 
@@ -16,7 +21,7 @@ class Adapter(ABC):
     @classmethod
     @abstractmethod
     def create_type(cls, col: Collection):
-        """keep type from collection(source) to destination(file(xml, json,...), sql, etc...). Save all attributes. For types only STATIC save """
+        """not safety of type keeping from collection(source) to destination(file(xml, json,...), sql, etc...). Save all attributes. For types only STATIC save """
 
     @classmethod
     @abstractmethod
@@ -32,8 +37,8 @@ class Adapter(ABC):
     @abstractmethod
     def get_collection(cls,
                        m: bytes,
-                       sid: ServerId,
-                       ver: ServerVersion) -> Collection:
+                       f_id: FirmwareID,
+                       ver: FirmwareVersion) -> Collection:
         """get Collection by m: manufacturer, t: type, ver: version"""
 
     @classmethod

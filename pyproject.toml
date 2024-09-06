@@ -9,12 +9,12 @@ package-dir = {"" = "src"}
 
 [project]
 name = "DLMSAdapter"
-version = "0.1.6"
+version = "0.2.0"
 authors = [
     {name="Serj Kotilevski", email="youserj@outlook.com"}
 ]
 dependencies = [
-    "DLMS-SPODES >= 0.76.10",
+    "DLMS-SPODES >= 0.77.1",
     "semver>=3.0.2"
 ]
 description="dlms-spodes"

@@ -8,7 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 import logging
 from semver import Version as SemVer
-from DLMS_SPODES.cosem_interface_classes.collection import Collection, ServerId, ServerVersion, cst, ClassID, ic, ut, cdt, AssociationLN, Template
+from DLMS_SPODES.cosem_interface_classes.collection import Collection, FirmwareID, FirmwareVersion, cst, ClassID, ic, ut, cdt, AssociationLN, Template
 from DLMS_SPODES.cosem_interface_classes.association_ln.ver0 import ObjectListElement, AttributeAccessItem, AccessMode, is_attr_writable
 from DLMS_SPODES.cosem_interface_classes import implementations as impl, collection
 from DLMS_SPODES import exceptions as exc
@@ -23,18 +23,26 @@ template_path = root / "Template"
 types_path = root / "Types"
 if not types_path.exists():
     types_path.mkdir()
+KEEP_PATH: Path = root / "XML_devices"
+TEMPLATE_PATH: Path = root / "Templates"
+if not KEEP_PATH.exists():
+    KEEP_PATH.mkdir()
+if not TEMPLATE_PATH.exists():
+    TEMPLATE_PATH.mkdir()
 
 
 class Base(Adapter, ABC):
     TYPE_ROOT_TAG: str
-    KEEP_PATH: Path
-    TEMPLATE_PATH: Path
 
-    def __init__(self):
-        if not self.KEEP_PATH.exists():
-            self.KEEP_PATH.mkdir()
-        if not self.TEMPLATE_PATH.exists():
-            self.TEMPLATE_PATH.mkdir()
+    @staticmethod
+    def _get_keep_path(col: Collection) -> Path:
+        if (ldn := col.LDN.value) is None:
+            raise exc.EmptyObj(F"No LDN value in collection")
+        return (KEEP_PATH / ldn.contents.hex()).with_suffix(".xml")
+
+    @staticmethod
+    def _get_template_path(name: str) -> Path:
+        return (TEMPLATE_PATH / name).with_suffix(".tmp")
 
     @classmethod
     def _create_root_node(cls, tag: str) -> ET.Element:
@@ -44,12 +52,6 @@ class Base(Adapter, ABC):
     @abstractmethod
     def _get_root_node(cls, col: Collection, tag: str) -> ET.Element:
         """create xml root node and fill header(parameters)"""
-
-    @classmethod
-    def _get_keep_path(cls, col: Collection) -> Path:
-        if (ldn := col.LDN.value) is None:
-            raise exc.EmptyObj(F"No LDN value in collection")
-        return (cls.KEEP_PATH / ldn.contents.hex()).with_suffix(".xml")
 
     @classmethod
     def get_data(cls, col: Collection):
@@ -101,33 +103,33 @@ class Base(Adapter, ABC):
     @classmethod
     @abstractmethod
     @lru_cache(maxsize=100)
-    def get_col_path(cls, m: bytes, sid: ServerId, ver: ServerVersion) -> Path:
+    def get_col_path(cls, m: bytes, f_id: FirmwareID, ver: FirmwareVersion) -> Path:
         """return Path by parameters"""
 
     @classmethod
     @lru_cache(maxsize=100)
     def _get_collection(cls,
                         m: bytes,
-                        sid: ServerId,
-                        ver: ServerVersion) -> Collection:
-        path = cls.get_col_path(m, sid, ver)
+                        f_id: FirmwareID,
+                        ver: FirmwareVersion) -> Collection:
+        path = cls.get_col_path(m, f_id, ver)
         logger.info(F"find type {path=}")
         tree = ET.parse(path)
         new = cls.root2collection(
             r_n=tree.getroot(),
             col=Collection(
                 man=m,
-                s_id=sid))
+                f_id=f_id))
         return new
 
     @classmethod
     def get_collection(cls,
                        m: bytes,
-                       sid: ServerId,
-                       ver: ServerVersion) -> Collection:
+                       f_id: FirmwareID,
+                       ver: FirmwareVersion) -> Collection:
         """return copy of parent Collection"""
-        new = cls._get_collection(m, sid, ver).copy()
-        new.set_server_ver(ver)
+        new = cls._get_collection(m, f_id, ver).copy()
+        new.set_firm_ver(ver)
         return new
 
 
@@ -136,8 +138,6 @@ class Xml3(Base):
     TYPE_ROOT_TAG: str = "Objects"
     DATA_ROOT_TAG: str = "Objects"
     TEMPLATE_ROOT_TAG: str = "template.objects"
-    KEEP_PATH: Path = root / "XML_devices"
-    TEMPLATE_PATH: Path = root / "Templates"
 
     @classmethod
     def _get_root_node(cls, col: Collection, tag: str) -> ET.Element:
@@ -148,10 +148,10 @@ class Xml3(Base):
             ET.SubElement(r_n, "country_ver").text = str(SemVer.parse(col.country_ver.value.contents, optional_minor_and_patch=True))
         if col.manufacturer is not None:
             ET.SubElement(r_n, "manufacturer").text = col.manufacturer.decode("utf-8")
-        if col.server_id is not None:
-            ET.SubElement(r_n, "server_type").text = col.server_id.value.encoding.hex()
-        if col.server_ver is not None:
-            ET.SubElement(r_n, "server_ver", attrib={"instance": "1"}).text = str(SemVer.parse(col.server_ver.value.contents))
+        if col.firm_id is not None:
+            ET.SubElement(r_n, "server_type").text = col.firm_id.value.encoding.hex()
+        if col.firm_ver is not None:
+            ET.SubElement(r_n, "server_ver", attrib={"instance": "1"}).text = str(SemVer.parse(col.firm_ver.value.contents))
         return r_n
 
     @classmethod
@@ -180,21 +180,21 @@ class Xml3(Base):
         if (country := r_n.findtext("country")) is not None:
             col.set_country(collection.CountrySpecificIdentifiers(int(country)))
         if (country_ver := r_n.findtext("country_ver")) is not None:
-            col.set_country_ver(ServerVersion(
+            col.set_country_ver(FirmwareVersion(
                 par=b'\x00\x00\x60\x01\x06\xff\x02',  # 0.0.96.1.6.255:2
                 value=cdt.OctetString(bytearray(country_ver.encode(encoding="ascii")))
             ))
         if (manufacturer := r_n.findtext("manufacturer")) is not None:
             col.set_manufacturer(manufacturer.encode("utf-8"))
-        if (server_id := r_n.findtext("server_type")) is not None:
-            col.set_server_id(ServerId(
+        if (firm_id := r_n.findtext("server_type")) is not None:
+            col.set_firm_id(FirmwareID(
                 par=b'\x00\x00\x60\x01\x01\xff\x02',  # 0.0.96.1.1.255:2
-                value=cdt.get_instance_and_pdu_from_value(bytes.fromhex(server_id))[0]
+                value=cdt.get_instance_and_pdu_from_value(bytes.fromhex(firm_id))[0]
             ))
-        if (server_ver := r_n.findtext("server_ver")) is not None:
-            col.set_collection_ver(ServerVersion(
+        if (firm_ver := r_n.findtext("server_ver")) is not None:
+            col.set_firm_ver(FirmwareVersion(
                 par=b'\x00\x00\x00\x02\x01\xff\x02',
-                value=cdt.OctetString(bytearray(server_ver.encode(encoding="ascii")))
+                value=cdt.OctetString(bytearray(firm_ver.encode(encoding="ascii")))
             ))
         col.spec_map = col.get_spec()
 
@@ -329,7 +329,7 @@ class Xml3(Base):
                 ret[man] = dict()
                 for sid_path in m_path.iterdir():
                     if sid_path.is_dir():
-                        ret[man][server_id := bytes.fromhex(sid_path.name)] = dict()
+                        ret[man][firm_id := bytes.fromhex(sid_path.name)] = dict()
                         for ver_path in sid_path.iterdir():
                             if ver_path.is_file() and ver_path.suffix == ".typ":
                                 try:
@@ -337,25 +337,26 @@ class Xml3(Base):
                                 except ValueError as e:
                                     logger.error(F"skip type, wrong file name {ver_path}: {e}")
                                     continue
-                                ret[man][server_id][v] = ver_path
+                                ret[man][firm_id][v] = ver_path
         return ret
 
     @classmethod
     @lru_cache(maxsize=100)
-    def get_col_path(cls, m: bytes, sid: ServerId, ver: ServerVersion) -> Path:
+    def get_col_path(cls, m: bytes, f_id: FirmwareID, ver: FirmwareVersion) -> Path:
         """ret: file, is_searched"""
         if (man := cls.get_manufactures_container().get(m)) is None:
             raise AdapterException(F"no support manufacturer: {m}")
-        elif (server_id := man.get(sid.value.encoding)) is None:
-            raise AdapterException(F"no support type {sid}, with manufacturer: {m}")
-        elif path := server_id.get(semver := SemVer.parse(ver.value.to_str())):
+        elif (firm_id := man.get(f_id.value.encoding)) is None:
+            raise AdapterException(F"no support type {f_id}, with manufacturer: {m}")
+        elif path := firm_id.get(semver := SemVer.parse(ver.value.to_str())):
             logger.info(F"got collection from library by {path=}")
             return path
         else:
             try:
-                return server_id.get(max(filter(lambda v: v.is_compatible(semver) and (semver.compare(v) >= 0), server_id.keys())))
+                # todo: remove all compatible without MAX version
+                return firm_id.get(max(filter(lambda v: v.is_compatible(semver), firm_id.keys())))
             except ValueError:
-                raise AdapterException(F"no support version {ver} with manufacturer: {m}, identifier: {sid}")
+                raise AdapterException(F"no support version {ver} with manufacturer: {m}, identifier: {f_id}")
 
     @classmethod
     def create_template(cls,
@@ -373,8 +374,6 @@ class Xml40(Base):
     TYPE_ROOT_TAG = Xml3.TYPE_ROOT_TAG
     DATA_ROOT_TAG = Xml3.DATA_ROOT_TAG
     TEMPLATE_ROOT_TAG = Xml3.TEMPLATE_ROOT_TAG
-    KEEP_PATH = Xml3.KEEP_PATH
-    TEMPLATE_PATH = Xml3.TEMPLATE_PATH
 
     @classmethod
     def _get_root_node(cls, col: Collection, tag: str) -> ET.Element:
@@ -389,8 +388,8 @@ class Xml40(Base):
         return Xml3.get_manufactures_container()
 
     @classmethod
-    def get_col_path(cls, m: bytes, sid: ServerId, ver: ServerVersion) -> Path:
-        return Xml3.get_col_path(m, sid, ver)
+    def get_col_path(cls, m: bytes, f_id: FirmwareID, ver: FirmwareVersion) -> Path:
+        return Xml3.get_col_path(m, f_id, ver)
 
     @classmethod
     def create_type(cls, col: Collection):
@@ -527,8 +526,6 @@ class Xml41(Base):
     TYPE_ROOT_TAG = Xml3.TYPE_ROOT_TAG
     DATA_ROOT_TAG = Xml3.DATA_ROOT_TAG
     TEMPLATE_ROOT_TAG = Xml3.TEMPLATE_ROOT_TAG
-    KEEP_PATH = Xml3.KEEP_PATH
-    TEMPLATE_PATH = Xml3.TEMPLATE_PATH
 
     @classmethod
     def set_parameters(cls, r_n: ET.Element, col: Collection):
@@ -539,8 +536,8 @@ class Xml41(Base):
         return Xml3.get_manufactures_container()
 
     @classmethod
-    def get_col_path(cls, m: bytes, sid: ServerId, ver: ServerVersion) -> Path:
-        return Xml3.get_col_path(m, sid, ver)
+    def get_col_path(cls, m: bytes, f_id: FirmwareID, ver: FirmwareVersion) -> Path:
+        return Xml3.get_col_path(m, f_id, ver)
 
     @classmethod
     def _get_root_node(cls, col: Collection, tag: str) -> ET.Element:
@@ -548,12 +545,6 @@ class Xml41(Base):
 
     @classmethod
     def create_type(cls, col: Collection):
-        if not isinstance(col.manufacturer, bytes):
-            raise AdapterException(F"{col} hasn't manufacturer parameter")
-        if not isinstance(col.server_id, ServerId):
-            raise AdapterException(F"{col} hasn't {ServerId.__class__.__name__} parameter")
-        if not isinstance(col.server_ver, ServerVersion):
-            raise AdapterException(F"{col} hasn't {ServerVersion.__class__.__name__} parameter")
         root_node = cls._get_root_node(col, cls.TYPE_ROOT_TAG)
         objs: dict[cst.LogicalName, set[int]] = dict()
         """key: LN, value: not writable and readable container"""
@@ -605,9 +596,9 @@ class Xml41(Base):
         xml_string = ET.tostring(root_node, encoding='cp1251', method='xml')
         if not (man_path := types_path / col.manufacturer.decode("ascii")).exists():
             man_path.mkdir()
-        if not (type_path := man_path / col.server_id.value.encoding.hex()).exists():
+        if not (type_path := man_path / col.firm_id.value.encoding.hex()).exists():
             type_path.mkdir()
-        ver_path = type_path / F"{SemVer.parse(col.server_ver.value.to_str())}.typ"  # use
+        ver_path = type_path / F"{SemVer.parse(col.firm_ver.value.to_str())}.typ"  # use
         with open(ver_path, "wb") as f:
             f.write(xml_string)
 
@@ -618,8 +609,8 @@ class Xml41(Base):
         is_empty: bool = True
         parent_col = cls._get_collection(
             m=col.manufacturer,
-            sid=col.server_id,
-            ver=col.server_ver)
+            f_id=col.firm_id,
+            ver=col.firm_ver)
         obj_list_el: ObjectListElement
         a_a: AttributeAccessItem
         for obj_list_el in col.getASSOCIATION(ass_id).object_list:
@@ -675,14 +666,10 @@ class Xml41(Base):
             manufacture_node = ET.SubElement(r_n, "manufacturer")
             manufacture_node.text = col.manufacturer.decode("utf-8")
             server_type_node = ET.SubElement(manufacture_node, "server_type")
-            server_type_node.text = col.server_id.value.encoding.hex()
-            server_ver_node = ET.SubElement(server_type_node, "server_ver", attrib={"instance": "1"})
-            server_ver_node.text = str(col.server_ver.get_semver())
+            server_type_node.text = col.firm_id.value.encoding.hex()
+            firm_ver_node = ET.SubElement(server_type_node, "server_ver", attrib={"instance": "1"})
+            firm_ver_node.text = str(col.firm_ver.get_semver())
         return r_n
-
-    @classmethod
-    def _get_template_path(cls, name: str) -> Path:
-        return (cls.TEMPLATE_PATH / name).with_suffix(".tmp")
 
     @classmethod
     def create_template(cls,
@@ -766,15 +753,15 @@ class Xml41(Base):
 
         for manufacturer_node in r_n.findall("manufacturer"):
             for server_type_node in manufacturer_node.findall("server_type"):
-                for server_ver_node in server_type_node.findall("server_ver"):
+                for firm_ver_node in server_type_node.findall("server_ver"):
                     cols.append(cls.get_collection(
                         m=manufacturer_node.text.encode("utf-8"),
-                        sid=ServerId(
+                        f_id=FirmwareID(
                             par=b'\x00\x00\x60\x01\x01\xff\x02',
                             value=cdt.get_instance_and_pdu_from_value(bytes.fromhex(server_type_node.text))[0]),
-                        ver=ServerVersion(
+                        ver=FirmwareVersion(
                             par=b'\x00\x00\x00\x02\x00\xff\x02',
-                            value=cdt.OctetString(bytearray(server_ver_node.text.encode(encoding="ascii")))
+                            value=cdt.OctetString(bytearray(firm_ver_node.text.encode(encoding="ascii")))
                         )
                     ))
         for obj in r_n.findall('object'):
@@ -828,7 +815,7 @@ class Xml41(Base):
 def server2node(
         node: ET.Element,
         name: str,
-        s_v: ServerVersion | ServerId) -> ET.Element:
+        s_v: FirmwareVersion | FirmwareID) -> ET.Element:
     ret = ET.SubElement(
         node,
         name,
@@ -844,8 +831,6 @@ def server2node(
 #     TYPE_ROOT_TAG = "DLMSServerType"
 #     DATA_ROOT_TAG = "DLMSServerData"
 #     TEMPLATE_ROOT_TAG: str = "DLMSServerTemplate"
-#     KEEP_PATH = Xml3.KEEP_PATH
-#     TEMPLATE_PATH = Xml3.TEMPLATE_PATH
 #
 #     @classmethod
 #     def get_version(cls) -> SemVer:
@@ -860,20 +845,20 @@ def server2node(
 #             server2node(r_n, "country_ver", col.country_ver)
 #         if col.manufacturer is not None:
 #             ET.SubElement(r_n, "manufacturer").text = col.manufacturer.hex()
-#         if col.server_id is not None:
-#             server2node(r_n, "ser_id", col.server_id)
-#         if col.server_ver is not None:
-#             server2node(r_n, "ser_ver", col.server_ver)
+#         if col.firm_id is not None:
+#             server2node(r_n, "ser_id", col.firm_id)
+#         if col.firm_ver is not None:
+#             server2node(r_n, "ser_ver", col.firm_ver)
 #         return r_n
 #
 #     @classmethod
 #     def create_type(cls, col: Collection):
 #         if not isinstance(col.manufacturer, bytes):
 #             raise AdapterException(F"{col} hasn't manufacturer parameter")
-#         if not isinstance(col.server_id, ServerId):
-#             raise AdapterException(F"{col} hasn't {ServerId.__class__.__name__} parameter")
-#         if not isinstance(col.server_ver, ServerVersion):
-#             raise AdapterException(F"{col} hasn't {ServerVersion.__class__.__name__} parameter")
+#         if not isinstance(col.firm_id, FirmwareID):
+#             raise AdapterException(F"{col} hasn't {FirmwareID.__class__.__name__} parameter")
+#         if not isinstance(col.firm_ver, FirmwareVersion):
+#             raise AdapterException(F"{col} hasn't {FirmwareVersion.__class__.__name__} parameter")
 #         root_node = cls._get_root_node(col, Xml50.TYPE_ROOT_TAG)
 #         objs: dict[cst.LogicalName, set[int]] = dict()
 #         """key: LN, value: not writable and readable container"""
@@ -925,8 +910,8 @@ def server2node(
 #         xml_string = ET.tostring(root_node, encoding="utf-8", method='xml')
 #         if not (man_path := types_path / col.manufacturer.decode("ascii")).exists():
 #             man_path.mkdir()
-#         if not (type_path := man_path / col.server_id.value.encoding.hex()).exists():
+#         if not (type_path := man_path / col.firm_id.value.encoding.hex()).exists():
 #             type_path.mkdir()
-#         ver_path = type_path / F"{col.server_ver.get_semver()}.xml"
+#         ver_path = type_path / F"{col.firm_ver.get_semver()}.xml"
 #         with open(ver_path, "wb") as f:
 #             f.write(xml_string)
