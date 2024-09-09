@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-import asyncio
 from DLMS_SPODES.cosem_interface_classes.collection import (
     Collection,
     FirmwareID,

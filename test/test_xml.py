@@ -2,7 +2,7 @@ import unittest
 import asyncio
 from DLMS_SPODES.cosem_interface_classes import collection, overview
 from DLMS_SPODES.types import cdt, cst
-from src.DLMSAdapter.xml_ import Xml41, Xml40, Xml3, ET
+from src.DLMSAdapter.xml_ import Xml41, Xml40, Xml3, ET, Xml50
 import logging
 
 server_1_4_15 = collection.FirmwareVersion(
@@ -32,7 +32,7 @@ logger.level = logging.INFO
 
 class TestType(unittest.TestCase):
     def test_create_adapter(self):
-        adapter_ = Xml41()
+        adapter_ = Xml50()
 
     def test_create_type(self):
         print(colXXX)
@@ -48,6 +48,7 @@ class TestType(unittest.TestCase):
         col = Xml41.get_collection(
             m=b"KPZ",
             f_id=collection.FirmwareID(
+                # par=bytes.fromhex("0000000200ff02"),
                 par=bytes.fromhex("0000600101ff02"),
                 value=cdt.OctetString(bytearray(b'M2M_1'))),
             ver=collection.FirmwareVersion(

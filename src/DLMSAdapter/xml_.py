@@ -31,6 +31,11 @@ if not TEMPLATE_PATH.exists():
     TEMPLATE_PATH.mkdir()
 
 
+type Manufacturer = bytes
+type FirmwareId = bytes
+type FirmwareVer = bytes
+
+
 class Base(Adapter, ABC):
     TYPE_ROOT_TAG: str
 
@@ -174,7 +179,6 @@ class Xml3(Base):
 
     @classmethod
     def set_parameters(cls, r_n: ET.Element, col: Collection):
-        """set or validate DLMS_VER, COUNTRY, COUNTRY_VER, MANUFACTURER, SERVER_ID, SERVER_VER with xml"""
         if (dlms_ver := r_n.findtext("dlms_ver")) is not None:
             col.set_dlms_ver(int(dlms_ver))
         if (country := r_n.findtext("country")) is not None:
@@ -532,7 +536,8 @@ class Xml41(Base):
         Xml3.set_parameters(r_n, col)
 
     @staticmethod
-    def get_manufactures_container() -> dict[bytes, dict[bytes, dict[SemVer, Path]]]:
+    @lru_cache(1)
+    def get_manufactures_container() -> dict[Manufacturer, dict[FirmwareId, dict[SemVer, Path]]]:
         return Xml3.get_manufactures_container()
 
     @classmethod
@@ -601,6 +606,7 @@ class Xml41(Base):
         ver_path = type_path / F"{SemVer.parse(col.firm_ver.value.to_str())}.typ"  # use
         with open(ver_path, "wb") as f:
             f.write(xml_string)
+            cls.get_manufactures_container().cache_clear()
 
     @classmethod
     def keep_data(cls, col: Collection, ass_id: int = 3) -> bool:
@@ -825,93 +831,195 @@ def server2node(
     return ret
 
 
-# class Xml50(Base):
-#     """"""
-#     VERSION = SemVer(5, 0)
-#     TYPE_ROOT_TAG = "DLMSServerType"
-#     DATA_ROOT_TAG = "DLMSServerData"
-#     TEMPLATE_ROOT_TAG: str = "DLMSServerTemplate"
-#
-#     @classmethod
-#     def get_version(cls) -> SemVer:
-#         return SemVer(5, 0)
-#
-#     @classmethod
-#     def _get_root_node(cls, col: Collection, tag: str) -> ET.Element:
-#         r_n = cls._create_root_node(tag)
-#         ET.SubElement(r_n, "dlms_ver").text = str(col.dlms_ver)
-#         ET.SubElement(r_n, "country").text = str(col.country.value)
-#         if col.country_ver:
-#             server2node(r_n, "country_ver", col.country_ver)
-#         if col.manufacturer is not None:
-#             ET.SubElement(r_n, "manufacturer").text = col.manufacturer.hex()
-#         if col.firm_id is not None:
-#             server2node(r_n, "ser_id", col.firm_id)
-#         if col.firm_ver is not None:
-#             server2node(r_n, "ser_ver", col.firm_ver)
-#         return r_n
-#
-#     @classmethod
-#     def create_type(cls, col: Collection):
-#         if not isinstance(col.manufacturer, bytes):
-#             raise AdapterException(F"{col} hasn't manufacturer parameter")
-#         if not isinstance(col.firm_id, FirmwareID):
-#             raise AdapterException(F"{col} hasn't {FirmwareID.__class__.__name__} parameter")
-#         if not isinstance(col.firm_ver, FirmwareVersion):
-#             raise AdapterException(F"{col} hasn't {FirmwareVersion.__class__.__name__} parameter")
-#         root_node = cls._get_root_node(col, Xml50.TYPE_ROOT_TAG)
-#         objs: dict[cst.LogicalName, set[int]] = dict()
-#         """key: LN, value: not writable and readable container"""
-#         for ass in filter(lambda it: it.logical_name.e != 0, col.get_objects_by_class_id(ClassID.ASSOCIATION_LN)):
-#             if ass.object_list is None:
-#                 logger.warning(F"for {ass} got empty <object_list>. skip it")
-#                 continue
-#             for obj_el in ass.object_list:
-#                 if str(obj_el.logical_name) in ("0.0.40.0.0.255", "0.0.42.0.0.255"):
-#                     """skip LDN and current_association"""
-#                     continue
-#                 elif obj_el.logical_name in objs:
-#                     """"""
-#                 else:
-#                     objs[obj_el.logical_name] = set()
-#                 for access in obj_el.access_rights.attribute_access[1:]:  # without ln
-#                     if not access.access_mode.is_writable() and access.access_mode.is_readable():
-#                         objs[obj_el.logical_name].add(int(access.attribute_id))
-#         o2 = list()
-#         """container sort by AssociationLN first"""
-#         for ln in objs.keys():
-#             obj = col.get_object(ln)
-#             if obj.CLASS_ID == ClassID.ASSOCIATION_LN:
-#                 o2.insert(0, obj)
-#             else:
-#                 o2.append(obj)
-#         for obj in o2:
-#             object_node = ET.SubElement(root_node, "obj", attrib={'ln': str(obj.logical_name.get_report().msg)})
-#             if obj.CLASS_ID == ClassID.ASSOCIATION_LN:
-#                 ET.SubElement(object_node, "ver").text = str(obj.VERSION)
-#             v = objs[obj.logical_name]
-#             for i, attr in filter(lambda it: it[0] != 1, obj.get_index_with_attributes()):
-#                 el: ic.ICAElement = obj.get_attr_element(i)
-#                 if el.classifier == ic.Classifier.STATIC and ((i in v) or el.DATA_TYPE == impl.profile_generic.CaptureObjectsDisplayReadout):
-#                     if attr is None:
-#                         logger.error(F"for {obj} attr: {i} not set, value is absense")
-#                     else:
-#                         ET.SubElement(object_node, "attr", attrib={"i": str(i)}).text = attr.encoding.hex()
-#                 elif isinstance(el.DATA_TYPE, ut.CHOICE):  # need keep all CHOICES types if possible
-#                     if attr is None:
-#                         logger.error(F"for {obj} attr: {i} type not set, value is absense")
-#                     else:
-#                         ET.SubElement(object_node, "attr", attrib={"i": str(i)}).text = str(attr.TAG[0])
-#                 else:
-#                     logger.info(F"for {obj} attr: {i} value not need. skipped")
-#             if len(object_node) == 0:
-#                 root_node.remove(object_node)
-#         # TODO: '<!DOCTYPE ITE_util_tree SYSTEM "setting.dtd"> or xsd
-#         xml_string = ET.tostring(root_node, encoding="utf-8", method='xml')
-#         if not (man_path := types_path / col.manufacturer.decode("ascii")).exists():
-#             man_path.mkdir()
-#         if not (type_path := man_path / col.firm_id.value.encoding.hex()).exists():
-#             type_path.mkdir()
-#         ver_path = type_path / F"{col.firm_ver.get_semver()}.xml"
-#         with open(ver_path, "wb") as f:
-#             f.write(xml_string)
+class Xml50(Base):
+    """"""
+
+    @classmethod
+    def root2data(cls, r_n: ET.Element, col: Collection):
+        pass
+
+    @classmethod
+    def root2collection(cls, r_n: ET.Element, col: Collection):
+        pass
+
+    @classmethod
+    def keep_data(cls, col: Collection, ass_id: int = 3) -> bool:
+        pass
+
+    @classmethod
+    def create_template(cls, name: str, template: Template):
+        pass
+
+    @classmethod
+    def get_template(cls, name: str) -> Template:
+        pass
+
+    VERSION = SemVer(5, 0)
+    TYPE_ROOT_TAG = "DLMSServerType"
+    DATA_ROOT_TAG = "DLMSServerData"
+    TEMPLATE_ROOT_TAG: str = "DLMSServerTemplate"
+
+    @classmethod
+    def set_parameters(cls, r_n: ET.Element, col: Collection):
+        # todo: wrong from ver3.0
+        if (dlms_ver := r_n.findtext("dlms_ver")) is not None:
+            col.set_dlms_ver(int(dlms_ver))
+        if (country := r_n.findtext("country")) is not None:
+            col.set_country(collection.CountrySpecificIdentifiers(int(country)))
+        if (country_ver := r_n.findtext("country_ver")) is not None:
+            col.set_country_ver(FirmwareVersion(
+                par=b'\x00\x00\x60\x01\x06\xff\x02',  # 0.0.96.1.6.255:2
+                value=cdt.OctetString(bytearray(country_ver.encode(encoding="ascii")))
+            ))
+        if (manufacturer := r_n.findtext("manufacturer")) is not None:
+            col.set_manufacturer(manufacturer.encode("utf-8"))
+        if (firm_id := r_n.findtext("server_type")) is not None:
+            col.set_firm_id(FirmwareID(
+                par=b'\x00\x00\x60\x01\x01\xff\x02',  # 0.0.96.1.1.255:2
+                value=cdt.get_instance_and_pdu_from_value(bytes.fromhex(firm_id))[0]
+            ))
+        if (firm_ver := r_n.findtext("server_ver")) is not None:
+            col.set_firm_ver(FirmwareVersion(
+                par=b'\x00\x00\x00\x02\x01\xff\x02',
+                value=cdt.OctetString(bytearray(firm_ver.encode(encoding="ascii")))
+            ))
+        col.spec_map = col.get_spec()
+
+    @classmethod
+    @lru_cache(maxsize=100)
+    def get_col_path(cls, m: bytes, f_id: FirmwareID, ver: FirmwareVersion) -> Path:
+        """ret: file, is_searched"""
+        if (man := cls.get_manufactures_container().get(m)) is None:
+            raise AdapterException(F"no support manufacturer: {m}")
+        elif (firm_id := man.get(f_id.value.encoding)) is None:
+            raise AdapterException(F"no support type {f_id}, with manufacturer: {m}")
+        elif (path := firm_id.get(ver.value.encoding)) is not None:
+            logger.info(F"got collection from library by {path=}")
+            return path
+        elif SemVer.is_valid(ver.value.contents.decode("utf-8", "ignore")):
+            logger.warning(F"try find compatible version...")
+            semver = ver.get_semver()
+            compatible: list[SemVer] = list()
+            plain: list[FirmwareVer] = list()
+            for v in firm_id.keys():
+                if SemVer.is_valid(v.decode("utf-8", "ignore")) and (sv := SemVer.parse(v)).is_compatible(semver):
+                    compatible.append(sv)
+                    plain.append(v)
+            if len(compatible) == 0:
+                logger.error(F"compatible version was not find")
+            else:
+                return firm_id[plain[compatible.index(max(compatible))]]
+        else:
+            # raise AdapterException(F"no support version {ver} with manufacturer: {m}, identifier: {f_id}")
+            raise Xml3.get_col_path(m, f_id, ver)
+
+    @staticmethod
+    def get_manufactures_container() -> dict[Manufacturer, dict[FirmwareId, dict[FirmwareVer, Path]]]:
+        logger.info(F"use manufacturer configuration system {Xml50.__name__}")
+        ret = dict()
+        for m_path in types_path.iterdir():
+            if m_path.is_dir():
+                if man6.fullmatch(m_path.name) is not None:
+                    man = bytes.fromhex(m_path.name)
+                else:
+                    logger.warning(F"skip <{m_path}>: not recognized like manufacturer")
+                    continue
+                ret[man] = dict()
+                for fid in m_path.iterdir():
+                    if fid.is_dir() and fid.name.isdecimal():
+                        ret[man][firm_id := bytes.fromhex(fid.name)] = dict()
+                        for ver_path in fid.iterdir():
+                            if ver_path.is_file() and ver_path.suffix == ".xml":
+                                try:
+                                    v = SemVer.parse(ver_path.stem)
+                                except ValueError as e:
+                                    logger.error(F"skip type, wrong file name {ver_path}: {e}")
+                                    continue
+                                ret[man][firm_id][v] = ver_path
+        return ret
+
+    @classmethod
+    def get_version(cls) -> SemVer:
+        return SemVer(5, 0)
+
+    @classmethod
+    def _get_root_node(cls, col: Collection, tag: str) -> ET.Element:
+        r_n = cls._create_root_node(tag)
+        ET.SubElement(r_n, "dlms_ver").text = str(col.dlms_ver)
+        ET.SubElement(r_n, "country").text = str(col.country.value)
+        if col.country_ver:
+            server2node(r_n, "country_ver", col.country_ver)
+        if col.manufacturer is not None:
+            ET.SubElement(r_n, "manufacturer").text = col.manufacturer.hex()
+        if col.firm_id is not None:
+            server2node(r_n, "ser_id", col.firm_id)
+        if col.firm_ver is not None:
+            server2node(r_n, "ser_ver", col.firm_ver)
+        return r_n
+
+    @classmethod
+    def create_type(cls, col: Collection):
+        if not isinstance(col.manufacturer, bytes):
+            raise AdapterException(F"{col} hasn't manufacturer parameter")
+        if not isinstance(col.firm_id, FirmwareID):
+            raise AdapterException(F"{col} hasn't {FirmwareID.__class__.__name__} parameter")
+        if not isinstance(col.firm_ver, FirmwareVersion):
+            raise AdapterException(F"{col} hasn't {FirmwareVersion.__class__.__name__} parameter")
+        root_node = cls._get_root_node(col, Xml50.TYPE_ROOT_TAG)
+        objs: dict[cst.LogicalName, set[int]] = dict()
+        """key: LN, value: not writable and readable container"""
+        for ass in filter(lambda it: it.logical_name.e != 0, col.get_objects_by_class_id(ClassID.ASSOCIATION_LN)):
+            if ass.object_list is None:
+                logger.warning(F"for {ass} got empty <object_list>. skip it")
+                continue
+            for obj_el in ass.object_list:
+                if str(obj_el.logical_name) in ("0.0.40.0.0.255", "0.0.42.0.0.255"):
+                    """skip LDN and current_association"""
+                    continue
+                elif obj_el.logical_name in objs:
+                    """"""
+                else:
+                    objs[obj_el.logical_name] = set()
+                for access in obj_el.access_rights.attribute_access[1:]:  # without ln
+                    if not access.access_mode.is_writable() and access.access_mode.is_readable():
+                        objs[obj_el.logical_name].add(int(access.attribute_id))
+        o2 = list()
+        """container sort by AssociationLN first"""
+        for ln in objs.keys():
+            obj = col.get_object(ln)
+            if obj.CLASS_ID == ClassID.ASSOCIATION_LN:
+                o2.insert(0, obj)
+            else:
+                o2.append(obj)
+        for obj in o2:
+            object_node = ET.SubElement(root_node, "obj", attrib={'ln': str(obj.logical_name.get_report().msg)})
+            if obj.CLASS_ID == ClassID.ASSOCIATION_LN:
+                ET.SubElement(object_node, "ver").text = str(obj.VERSION)
+            v = objs[obj.logical_name]
+            for i, attr in filter(lambda it: it[0] != 1, obj.get_index_with_attributes()):
+                el: ic.ICAElement = obj.get_attr_element(i)
+                if el.classifier == ic.Classifier.STATIC and ((i in v) or el.DATA_TYPE == impl.profile_generic.CaptureObjectsDisplayReadout):
+                    if attr is None:
+                        logger.error(F"for {obj} attr: {i} not set, value is absense")
+                    else:
+                        ET.SubElement(object_node, "attr", attrib={"i": str(i)}).text = attr.encoding.hex()
+                elif isinstance(el.DATA_TYPE, ut.CHOICE):  # need keep all CHOICES types if possible
+                    if attr is None:
+                        logger.error(F"for {obj} attr: {i} type not set, value is absense")
+                    else:
+                        ET.SubElement(object_node, "attr", attrib={"i": str(i)}).text = str(attr.TAG[0])
+                else:
+                    logger.info(F"for {obj} attr: {i} value not need. skipped")
+            if len(object_node) == 0:
+                root_node.remove(object_node)
+        # TODO: '<!DOCTYPE ITE_util_tree SYSTEM "setting.dtd"> or xsd
+        xml_string = ET.tostring(root_node, encoding="utf-8", method='xml')
+        if not (man_path := types_path / col.manufacturer.hex()).exists():
+            man_path.mkdir()
+        if not (type_path := man_path / col.firm_id.value.encoding.hex()).exists():
+            type_path.mkdir()
+        ver_path = type_path / F"{col.firm_ver.get_semver()}.xml"
+        with open(ver_path, "wb") as f:
+            f.write(xml_string)
+            cls.get_manufactures_container().cache_clear()
+
