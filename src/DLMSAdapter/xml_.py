@@ -914,6 +914,7 @@ class Xml50(Base):
             raise Xml3.get_col_path(m, f_id, ver)
 
     @staticmethod
+    @lru_cache(1)
     def get_manufactures_container() -> dict[Manufacturer, dict[FirmwareId, dict[FirmwareVer, Path]]]:
         logger.info(F"use manufacturer configuration system {Xml50.__name__}")
         ret = dict()
@@ -1021,5 +1022,5 @@ class Xml50(Base):
         ver_path = type_path / F"{col.firm_ver.get_semver()}.xml"
         with open(ver_path, "wb") as f:
             f.write(xml_string)
-            cls.get_manufactures_container().cache_clear()
+            cls.get_manufactures_container.cache_clear()
 

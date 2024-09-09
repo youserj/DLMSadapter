@@ -37,12 +37,35 @@ class TestType(unittest.TestCase):
     def test_create_type(self):
         print(colXXX)
         # col.LDN.set_attr(2, bytearray(b'XXX0000000001234'))
-        Xml41.create_type(colXXX)
-        # Xml50.create_type(col)
+        # Xml41.create_type(colXXX)
+        Xml50.create_type(colXXX)
 
     def test_get_man(self):
         c = Xml3.get_manufactures_container()
         print(c)
+
+    def test_get_obj_list(self):
+        # todo: don't work now
+        col = Xml41.get_collection(
+            m=b"KPZ",
+            f_id=collection.FirmwareID(
+                # par=bytes.fromhex("0000000200ff02"),
+                par=bytes.fromhex("0000600101ff02"),
+                value=cdt.OctetString(bytearray(b'M2M_1'))),
+            ver=collection.FirmwareVersion(
+                par=bytes.fromhex("0000000201ff02"),
+                value=cdt.OctetString(bytearray(b"1.7.3"))))
+        print(col)
+        ass: collection.AssociationLN = col.get_object("0.0.40.0.3.255")
+        for el in tuple(ass.object_list):
+            el: collection.ObjectListElement
+            if el.logical_name in (cst.LogicalName.from_obis("0.0.40.0.3.255"), cst.LogicalName.from_obis("0.0.1.0.0.255")):
+                pass
+            else:
+                ass.object_list.remove(el)
+        col.set_firm_id(value=collection.FirmwareID(b'', cdt.OctetString("00")), force=True)
+        Xml50.create_type(col)
+        print(ass.object_list.encoding.hex())
 
     def test_get_collection(self):
         col = Xml41.get_collection(
