@@ -67,7 +67,7 @@ class TestType(unittest.TestCase):
         Xml50.create_type(col)
         print(ass.object_list.encoding.hex())
 
-    def test_get_collection(self):
+    def test_get_collection41(self):
         col = Xml41.get_collection(
             m=b"KPZ",
             f_id=collection.FirmwareID(
@@ -88,6 +88,28 @@ class TestType(unittest.TestCase):
         Xml41.keep_data(col)
         # get data
         Xml41.get_data(col2)
+        print(col2)
+
+    def test_get_collection50(self):
+        col = Xml50.get_collection(
+            m=b"KPZ",
+            f_id=collection.FirmwareID(
+                par=bytes.fromhex("0000000200ff02"),
+                value=cdt.OctetString(bytes.fromhex("090e5057524d5f4d324d5f315f46345f"))),
+            ver=collection.FirmwareVersion(
+                par=bytes.fromhex("0000000201ff02"),
+                value=cdt.OctetString(bytearray(b"1.7.3"))))
+        print(col)
+        col.LDN.set_attr(2, bytearray(b"KPZ00001234567890"))  # need for test
+        col2 = col.copy()
+        # keep path
+        clock_obj = col.get_object("0.0.1.0.0.255")
+        clock_obj.set_attr(3, 100)  # change any value for test
+        iccid_obj = col.get_object("0.128.25.6.0.255")
+        iccid_obj.set_attr(2, "01 02 03 04 05")
+        Xml50.keep_data(col)
+        # get data
+        Xml50.get_data(col2)
         print(col2)
 
     def test_template(self):

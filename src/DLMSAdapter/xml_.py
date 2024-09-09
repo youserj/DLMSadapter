@@ -16,6 +16,7 @@ from .main import Adapter, AdapterException
 
 logger = logging.getLogger(__name__)
 man6 = re.compile("([a-f, 0-9]{2}){3}")
+hex_ = re.compile("([a-f, A-D, 0-9]{2})+")
 
 root: Path = Path(".")
 """root for file as example"""
@@ -827,7 +828,7 @@ def server2node(
         name,
         {"par": s_v.par.hex()}
     )
-    ret.text = str(s_v.value.encoding)
+    ret.text = s_v.value.encoding.hex()
     return ret
 
 
@@ -840,7 +841,12 @@ class Xml50(Base):
 
     @classmethod
     def root2collection(cls, r_n: ET.Element, col: Collection):
-        pass
+        if not cls._is_header(r_n, Xml50.TYPE_ROOT_TAG, Xml50.VERSION):
+            return Xml41.root2collection(r_n, col)
+        cls.set_parameters(r_n, col)
+        Xml40._fill_collection40(r_n, col)
+        return col
+
 
     @classmethod
     def keep_data(cls, col: Collection, ass_id: int = 3) -> bool:
@@ -872,7 +878,7 @@ class Xml50(Base):
                 value=cdt.OctetString(bytearray(country_ver.encode(encoding="ascii")))
             ))
         if (manufacturer := r_n.findtext("manufacturer")) is not None:
-            col.set_manufacturer(manufacturer.encode("utf-8"))
+            col.set_manufacturer(bytes.fromhex(manufacturer))
         if (firm_id := r_n.findtext("server_type")) is not None:
             col.set_firm_id(FirmwareID(
                 par=b'\x00\x00\x60\x01\x01\xff\x02',  # 0.0.96.1.1.255:2
@@ -927,16 +933,11 @@ class Xml50(Base):
                     continue
                 ret[man] = dict()
                 for fid in m_path.iterdir():
-                    if fid.is_dir() and fid.name.isdecimal():
+                    if fid.is_dir() and hex_.fullmatch(fid.name):
                         ret[man][firm_id := bytes.fromhex(fid.name)] = dict()
                         for ver_path in fid.iterdir():
-                            if ver_path.is_file() and ver_path.suffix == ".xml":
-                                try:
-                                    v = SemVer.parse(ver_path.stem)
-                                except ValueError as e:
-                                    logger.error(F"skip type, wrong file name {ver_path}: {e}")
-                                    continue
-                                ret[man][firm_id][v] = ver_path
+                            if ver_path.is_file() and ver_path.suffix == ".xml" and hex_.fullmatch(ver_path.stem):
+                                ret[man][firm_id][bytes.fromhex(ver_path.stem)] = ver_path
         return ret
 
     @classmethod
