@@ -1019,7 +1019,7 @@ class Xml50(Base):
             man_path.mkdir()
         if not (type_path := man_path / col.firm_id.value.encoding.hex()).exists():
             type_path.mkdir()
-        ver_path = type_path / F"{col.firm_ver.get_semver()}.xml"
+        ver_path = type_path / F"{col.firm_ver.value.encoding.hex()}.xml"
         with open(ver_path, "wb") as f:
             f.write(xml_string)
             cls.get_manufactures_container.cache_clear()
