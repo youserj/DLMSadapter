@@ -8,7 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 import logging
 from semver import Version as SemVer
-from DLMS_SPODES.cosem_interface_classes.collection import Collection, FirmwareID, FirmwareVersion, cst, ClassID, ic, ut, cdt, AssociationLN, Template
+from DLMS_SPODES.cosem_interface_classes.collection import Collection, FirmwareID, FirmwareVersion, ParameterValue, cst, ClassID, ic, ut, cdt, AssociationLN, Template
 from DLMS_SPODES.cosem_interface_classes.association_ln.ver0 import ObjectListElement, AttributeAccessItem, AccessMode, is_attr_writable
 from DLMS_SPODES.cosem_interface_classes import implementations as impl, collection
 from DLMS_SPODES import exceptions as exc
@@ -421,30 +421,30 @@ class Xml40(Base):
 
     @classmethod
     def _fill_data40(cls, r_n: ET.Element, col: Collection):
-        for obj in r_n.findall("object"):
-            ln: str = obj.attrib.get("ln", 'is absence')
+        for obj_el in r_n.findall("object"):
+            ln: str = obj_el.attrib.get("ln", 'is absence')
             logical_name: cst.LogicalName = cst.LogicalName.from_obis(ln)
             if not col.is_in_collection(logical_name):
                 raise ValueError(F"got object with {ln=} not find in collection. Abort attribute setting")
             else:
-                new_object = col.get_object(logical_name)
-                for attr in obj.findall("attr"):
-                    index: int = int(attr.attrib.get("index"))
+                obj = col.get_object(logical_name)
+                for attr_el in obj_el.findall("attr"):
+                    index: int = int(attr_el.attrib.get("index"))
                     try:
-                        new_object.set_attr(index, bytes.fromhex(attr.text))
+                        obj.set_attr(index, bytes.fromhex(attr_el.text))
                     except exc.NoObject as e:
-                        logger.error(F"Can't fill {new_object} attr: {index}. Skip. {e}.")
+                        logger.error(F"Can't fill {obj} attr: {index}. Skip. {e}.")
                         break
                     except exc.ITEApplication as e:
-                        logger.error(F"Can't fill {new_object} attr: {index}. {e}")
+                        logger.error(F"Can't fill {obj} attr: {index}. {e}")
                     except IndexError:
-                        logger.error(F'Object "{new_object}" not has attr: {index}')
+                        logger.error(F'Object "{obj}" not has attr: {index}')
                     except TypeError as e:
-                        logger.error(F'Object {new_object} attr:{index} do not write, encoding wrong : {e}')
+                        logger.error(F'Object {obj} attr:{index} do not write, encoding wrong : {e}')
                     except ValueError as e:
-                        logger.error(F'Object {new_object} attr:{index} do not fill: {e}')
+                        logger.error(F'Object {obj} attr:{index} do not fill: {e}')
                     except AttributeError as e:
-                        logger.error(F'Object {new_object} attr:{index} do not fill: {e}')
+                        logger.error(F'Object {obj} attr:{index} do not fill: {e}')
 
     @staticmethod
     def _fill_collection40(r_n: ET.Element, col: Collection):
@@ -678,12 +678,11 @@ class Xml41(Base):
             firm_ver_node.text = str(col.firm_ver.get_semver())
         return r_n
 
-    @classmethod
-    def create_template(cls,
-                        name: str,
-                        template: Template):
+    @staticmethod
+    def temp2root(r_n: ET.Element,
+                  path: Path,
+                  template: Template):
         used_copy = copy.deepcopy(template.used)
-        r_n = cls._get_template_root_node(collections=template.collections)
         r_n.attrib["decode"] = "1"
         if template.verified:
             r_n.attrib["verified"] = "1"
@@ -739,14 +738,21 @@ class Xml41(Base):
                 break
         if len(used_copy) != 0:
             raise ValueError(F"failed decoding: {used_copy}")
-        with open(
-                cls._get_template_path(name),
-                mode="wb") as f:
+        with open(path, mode="wb") as f:
             f.write(ET.tostring(
                 element=r_n,
                 encoding="utf-8",
                 method="xml",
                 xml_declaration=True))
+
+    @classmethod
+    def create_template(cls,
+                        name: str,
+                        template: Template):
+        cls.temp2root(
+            r_n=cls._get_template_root_node(collections=template.collections),
+            path=cls._get_template_path(name),
+            template=template)
 
     @classmethod
     def get_template(cls, name: str) -> Template:
@@ -819,25 +825,19 @@ class Xml41(Base):
             verified=bool(int(r_n.findtext("verified", default="0"))))
 
 
-def server2node(
-        node: ET.Element,
-        name: str,
-        s_v: FirmwareVersion | FirmwareID) -> ET.Element:
-    ret = ET.SubElement(
-        node,
-        name,
-        {"par": s_v.par.hex()}
-    )
-    ret.text = s_v.value.encoding.hex()
-    return ret
-
-
 class Xml50(Base):
     """"""
+    VERSION = SemVer(5, 0)
+    TYPE_ROOT_TAG = "DLMSServerType"
+    DATA_ROOT_TAG = "DLMSServerData"
+    TEMPLATE_ROOT_TAG: str = "DLMSServerTemplate"
 
     @classmethod
     def root2data(cls, r_n: ET.Element, col: Collection):
-        pass
+        if not cls._is_header(r_n, Xml50.DATA_ROOT_TAG, Xml50.VERSION):
+            return Xml41.root2data(r_n, col)
+        cls.set_parameters(r_n, col)
+        Xml40._fill_data40(r_n, col)
 
     @classmethod
     def root2collection(cls, r_n: ET.Element, col: Collection):
@@ -847,23 +847,93 @@ class Xml50(Base):
         Xml40._fill_collection40(r_n, col)
         return col
 
-
     @classmethod
     def keep_data(cls, col: Collection, ass_id: int = 3) -> bool:
-        pass
+        path = cls._get_keep_path(col)
+        root_node = cls._get_root_node(col, cls.DATA_ROOT_TAG)
+        is_empty: bool = True
+        parent_col = cls._get_collection(
+            m=col.manufacturer,
+            f_id=col.firm_id,
+            ver=col.firm_ver)
+        obj_list_el: ObjectListElement
+        a_a: AttributeAccessItem
+        for obj_list_el in col.getASSOCIATION(ass_id).object_list:
+            obj = col.get_object(obj_list_el.logical_name)
+            parent_obj = parent_col.get_object(obj_list_el.logical_name)
+            object_node = None
+            for a_a in obj_list_el.access_rights.attribute_access:
+                if (i := int(a_a.attribute_id)) == 1:
+                    """skip ln"""
+                elif obj.get_attr_element(i).classifier == ic.Classifier.DYNAMIC:
+                    """skip DYNAMIC attributes"""
+                elif (attr := obj.get_attr(i)) is None:
+                    """skip empty attributes"""
+                elif parent_obj.get_attr(i) == attr:
+                    """skip not changed attr value"""
+                else:
+                    is_empty = False
+                    if object_node is None:
+                        object_node = ET.SubElement(root_node, "object", attrib={'ln': obj.logical_name.get_report().msg})
+                    ET.SubElement(object_node, "attr", attrib={'index': str(i)}).text = attr.encoding.hex()
+        if not is_empty:
+            # TODO: '<!DOCTYPE ITE_util_tree SYSTEM "setting.dtd"> or xsd
+            xml_string = ET.tostring(root_node, encoding="UTF-8", method="xml")
+            with open(path, "wb") as f:
+                f.write(xml_string)
+        else:
+            logger.warning("nothing save. all attributes according with origin collection")
+        return not is_empty
+
+    @staticmethod
+    def get_template_node(node: ET.Element, tag: str, value: str) -> ET.Element:
+        if (old := node.find(tag)) is not None and (old.findtext("value") == value):
+            return old
+        else:
+            new = ET.SubElement(node, tag)
+            ET.SubElement(new, "value").text = value
+        return new
 
     @classmethod
-    def create_template(cls, name: str, template: Template):
-        pass
+    def get_template_node_param(cls, parent: ET.Element, tag: str, value: ParameterValue) -> ET.Element:
+        if (old := parent.find(tag)) is not None and (old.findtext("value") == value.value.encoding.hex()) and (old.findtext("par") == value.par.hex()):
+            return old
+        else:
+            return cls.parval2node(parent, tag, value)
+
+    @staticmethod
+    def parval2node(parent: ET.Element, tag: str, value: ParameterValue) -> ET.Element:
+        new = ET.SubElement(parent, tag)
+        ET.SubElement(new, "par").text = value.par.hex()
+        ET.SubElement(new, "value").text = value.value.encoding.hex()
+        return new
+
+    @classmethod
+    def _get_template_root_node(cls,
+                                collections: list[Collection]) -> ET.Element:
+        r_n = cls._create_root_node(cls.TEMPLATE_ROOT_TAG)
+        for col in collections:
+            man_n = cls.get_template_node(r_n, "manufacturer", str(col.manufacturer.hex()))
+            firm_id_n = cls.get_template_node_param(man_n, "firm_id", col.firm_id)
+            cls.get_template_node_param(firm_id_n, "firm_ver", col.firm_ver)
+        return r_n
+
+    @staticmethod
+    def _get_template_path(name: str) -> Path:
+        return (TEMPLATE_PATH / name).with_suffix(".xml")
+
+    @classmethod
+    def create_template(cls,
+                        name: str,
+                        template: Template):
+        Xml41.temp2root(
+            r_n=cls._get_template_root_node(collections=template.collections),
+            path=cls._get_template_path(name),
+            template=template)
 
     @classmethod
     def get_template(cls, name: str) -> Template:
         pass
-
-    VERSION = SemVer(5, 0)
-    TYPE_ROOT_TAG = "DLMSServerType"
-    DATA_ROOT_TAG = "DLMSServerData"
-    TEMPLATE_ROOT_TAG: str = "DLMSServerTemplate"
 
     @classmethod
     def set_parameters(cls, r_n: ET.Element, col: Collection):
@@ -872,22 +942,22 @@ class Xml50(Base):
             col.set_dlms_ver(int(dlms_ver))
         if (country := r_n.findtext("country")) is not None:
             col.set_country(collection.CountrySpecificIdentifiers(int(country)))
-        if (country_ver := r_n.findtext("country_ver")) is not None:
+        if (country_ver_el := r_n.find("country_ver")) is not None:
             col.set_country_ver(FirmwareVersion(
-                par=b'\x00\x00\x60\x01\x06\xff\x02',  # 0.0.96.1.6.255:2
-                value=cdt.OctetString(bytearray(country_ver.encode(encoding="ascii")))
+                par=bytes.fromhex(country_ver_el.attrib.get("par", '')),
+                value=cdt.get_instance_and_pdu_from_value(bytes.fromhex(country_ver_el.text))[0]
             ))
         if (manufacturer := r_n.findtext("manufacturer")) is not None:
             col.set_manufacturer(bytes.fromhex(manufacturer))
-        if (firm_id := r_n.findtext("server_type")) is not None:
+        if (firm_id_el := r_n.find("firm_id")) is not None:
             col.set_firm_id(FirmwareID(
-                par=b'\x00\x00\x60\x01\x01\xff\x02',  # 0.0.96.1.1.255:2
-                value=cdt.get_instance_and_pdu_from_value(bytes.fromhex(firm_id))[0]
+                par=bytes.fromhex(firm_id_el.findtext("par", "")),
+                value=cdt.get_instance_and_pdu_from_value(bytes.fromhex(firm_id_el.findtext("value")))[0]
             ))
-        if (firm_ver := r_n.findtext("server_ver")) is not None:
+        if (firm_ver_el := r_n.find("firm_ver")) is not None:
             col.set_firm_ver(FirmwareVersion(
-                par=b'\x00\x00\x00\x02\x01\xff\x02',
-                value=cdt.OctetString(bytearray(firm_ver.encode(encoding="ascii")))
+                par=bytes.fromhex(firm_ver_el.findtext("par", "")),
+                value=cdt.get_instance_and_pdu_from_value(bytes.fromhex(firm_ver_el.findtext("value")))[0]
             ))
         col.spec_map = col.get_spec()
 
@@ -948,15 +1018,20 @@ class Xml50(Base):
     def _get_root_node(cls, col: Collection, tag: str) -> ET.Element:
         r_n = cls._create_root_node(tag)
         ET.SubElement(r_n, "dlms_ver").text = str(col.dlms_ver)
-        ET.SubElement(r_n, "country").text = str(col.country.value)
-        if col.country_ver:
-            server2node(r_n, "country_ver", col.country_ver)
+        return cls._get_type_node(col, r_n)
+
+    @classmethod
+    def _get_type_node(cls, col: Collection, r_n: ET.Element) -> ET.Element:
+        if col.country is not None:
+            ET.SubElement(r_n, "country").text = str(col.country.value)
+            if col.country_ver:
+                cls.parval2node(r_n, "country_ver", col.country_ver)
         if col.manufacturer is not None:
             ET.SubElement(r_n, "manufacturer").text = col.manufacturer.hex()
-        if col.firm_id is not None:
-            server2node(r_n, "ser_id", col.firm_id)
-        if col.firm_ver is not None:
-            server2node(r_n, "ser_ver", col.firm_ver)
+            if col.firm_id is not None:
+                cls.parval2node(r_n, "firm_id", col.firm_id)
+                if col.firm_ver is not None:
+                    cls.parval2node(r_n, "firm_ver", col.firm_ver)
         return r_n
 
     @classmethod

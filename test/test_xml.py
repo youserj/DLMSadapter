@@ -1,5 +1,4 @@
 import unittest
-import asyncio
 from DLMS_SPODES.cosem_interface_classes import collection, overview
 from DLMS_SPODES.types import cdt, cst
 from src.DLMSAdapter.xml_ import Xml41, Xml40, Xml3, ET, Xml50
@@ -8,9 +7,15 @@ import logging
 server_1_4_15 = collection.FirmwareVersion(
         par=bytes.fromhex("0000000201ff02"),
         value=cdt.OctetString(bytearray(b"1.4.15")))
+server_1_7_3 = collection.FirmwareVersion(
+        par=bytes.fromhex("0000000201ff02"),
+        value=cdt.OctetString(bytearray(b"1.7.3")))
 serID_M2M_1 = collection.FirmwareID(
         par=bytes.fromhex("0000600101ff02"),
         value=cdt.OctetString(bytearray(b'M2M_1')))
+serID50_M2M_1 = collection.FirmwareID(
+        par=bytes.fromhex("0000000200ff02"),
+        value=cdt.OctetString(bytes.fromhex("090e5057524d5f4d324d5f315f46345f")))
 serID_M2M_3 = collection.FirmwareID(
         par=bytes.fromhex("0000600101ff02"),
         value=cdt.OctetString(bytearray(b'M2M_3')))
@@ -36,9 +41,9 @@ class TestType(unittest.TestCase):
 
     def test_create_type(self):
         print(colXXX)
-        # col.LDN.set_attr(2, bytearray(b'XXX0000000001234'))
-        # Xml41.create_type(colXXX)
         Xml50.create_type(colXXX)
+        col = Xml50.get_collection(colXXX.manufacturer, colXXX.firm_id, colXXX.firm_ver)
+        print(col)
 
     def test_get_man(self):
         c = Xml3.get_manufactures_container()
@@ -113,17 +118,17 @@ class TestType(unittest.TestCase):
         print(col2)
 
     def test_template(self):
-        adapter = Xml41
+        adapter = Xml50
         col = adapter.get_collection(
             m=b"KPZ",
-            f_id=serID_M2M_3,
-            ver=server_1_4_15)
-        col2 = adapter.get_collection(
-            m=b"102",
-            f_id=serID_M2M_3,
-            ver=collection.FirmwareVersion(
-                par=bytes.fromhex("0000000201ff02"),
-                value=cdt.OctetString(bytearray(b"1.3.30"))))
+            f_id=serID50_M2M_1,
+            ver=server_1_7_3)
+        # col2 = adapter.get_collection(
+        #     m=b"102",
+        #     f_id=serID_M2M_3,
+        #     ver=collection.FirmwareVersion(
+        #         par=bytes.fromhex("0000000201ff02"),
+        #         value=cdt.OctetString(bytearray(b"1.3.30"))))
         clock_obj = col.get_object("0.0.1.0.0.255")
         clock_obj.set_attr(3, 120)
         act_cal = col.get_object("0.0.13.0.0.255")
@@ -131,7 +136,10 @@ class TestType(unittest.TestCase):
         adapter.create_template(
             name="template_test1",
             template=collection.Template(
-                collections=[col, col2],
+                collections=[
+                    col,
+                    # col2
+                ],
                 used={
                     clock_obj.logical_name: {3},
                     act_cal.logical_name: {9}
