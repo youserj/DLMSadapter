@@ -4,27 +4,32 @@ from DLMS_SPODES.types import cdt, cst
 from src.DLMSAdapter.xml_ import Xml41, Xml40, Xml3, ET, Xml50
 import logging
 
-server_1_4_15 = collection.FirmwareVersion(
+server_1_4_15 = collection.ParameterValue(
         par=bytes.fromhex("0000000201ff02"),
-        value=cdt.OctetString(bytearray(b"1.4.15")))
-server_1_7_3 = collection.FirmwareVersion(
+        value=cdt.OctetString(bytearray(b"1.4.15")).encoding)
+server_1_7_3 = collection.ParameterValue(
         par=bytes.fromhex("0000000201ff02"),
-        value=cdt.OctetString(bytearray(b"1.7.3")))
-serID_M2M_1 = collection.FirmwareID(
+        value=cdt.OctetString(bytearray(b"1.7.3")).encoding)
+server_1_7_4 = collection.ParameterValue(
+        par=bytes.fromhex("0000000201ff02"),
+        value=cdt.OctetString(bytearray(b"1.8.4")).encoding)
+serID_M2M_1 = collection.ParameterValue(
         par=bytes.fromhex("0000600101ff02"),
-        value=cdt.OctetString(bytearray(b'M2M_1')))
-serID50_M2M_1 = collection.FirmwareID(
+        value=cdt.OctetString(bytearray(b'M2M_1')).encoding)
+serID50_M2M_1 = collection.ParameterValue(
         par=bytes.fromhex("0000000200ff02"),
-        value=cdt.OctetString(bytes.fromhex("090e5057524d5f4d324d5f315f46345f")))
-serID_M2M_3 = collection.FirmwareID(
+        value=(bytes.fromhex("090e5057524d5f4d324d5f315f46345f"))
+)
+serID_M2M_3 = collection.ParameterValue(
         par=bytes.fromhex("0000600101ff02"),
-        value=cdt.OctetString(bytearray(b'M2M_3')))
+        value=cdt.OctetString(bytearray(b'M2M_3')).encoding)
 
 
 colXXX = collection.Collection(
     man=b'XXX',
-    f_id=collection.FirmwareID(b'1234567', cdt.OctetString(bytearray(b'M2M-1'))),
-    f_ver=collection.FirmwareVersion(b'1234560', cdt.OctetString(bytearray(b'1.4.2'))))
+    f_id=collection.ParameterValue(b'1234567', cdt.OctetString(bytearray(b'M2M-1')).encoding),
+    f_ver=collection.ParameterValue(b'1234560', cdt.OctetString(bytearray(b'1.4.2')).encoding)
+)
 clock_obj = colXXX.add(
     overview.ClassID.CLOCK,
     overview.Version.V0,
@@ -53,13 +58,14 @@ class TestType(unittest.TestCase):
         # todo: don't work now
         col = Xml41.get_collection(
             m=b"KPZ",
-            f_id=collection.FirmwareID(
+            f_id=collection.ParameterValue(
                 # par=bytes.fromhex("0000000200ff02"),
                 par=bytes.fromhex("0000600101ff02"),
-                value=cdt.OctetString(bytearray(b'M2M_1'))),
-            ver=collection.FirmwareVersion(
+                value=cdt.OctetString(bytearray(b'M2M_1')).encoding),
+            ver=collection.ParameterValue(
                 par=bytes.fromhex("0000000201ff02"),
-                value=cdt.OctetString(bytearray(b"1.7.3"))))
+                value=cdt.OctetString(bytearray(b"1.7.3")).encoding
+            ))
         print(col)
         ass: collection.AssociationLN = col.get_object("0.0.40.0.3.255")
         for el in tuple(ass.object_list):
@@ -68,20 +74,21 @@ class TestType(unittest.TestCase):
                 pass
             else:
                 ass.object_list.remove(el)
-        col.set_firm_id(value=collection.FirmwareID(b'', cdt.OctetString("00")), force=True)
+        col.set_firm_id(value=collection.ParameterValue(b'', cdt.OctetString("00").encoding), force=True)
         Xml50.create_type(col)
         print(ass.object_list.encoding.hex())
 
     def test_get_collection41(self):
         col = Xml41.get_collection(
             m=b"KPZ",
-            f_id=collection.FirmwareID(
+            f_id=collection.ParameterValue(
                 # par=bytes.fromhex("0000000200ff02"),
                 par=bytes.fromhex("0000600101ff02"),
-                value=cdt.OctetString(bytearray(b'M2M_1'))),
-            ver=collection.FirmwareVersion(
+                value=cdt.OctetString(bytearray(b'M2M_1')).encoding),
+            ver=collection.ParameterValue(
                 par=bytes.fromhex("0000000201ff02"),
-                value=cdt.OctetString(bytearray(b"1.7.3"))))
+                value=cdt.OctetString(bytearray(b"1.7.3")).encoding
+            ))
         print(col)
         col.LDN.set_attr(2, bytearray(b"KPZ00001234567890"))  # need for test
         col2 = col.copy()
@@ -98,12 +105,23 @@ class TestType(unittest.TestCase):
     def test_get_collection50(self):
         col = Xml50.get_collection(
             m=b"KPZ",
-            f_id=collection.FirmwareID(
+            f_id=collection.ParameterValue(
                 par=bytes.fromhex("0000000200ff02"),
-                value=cdt.OctetString(bytes.fromhex("090e5057524d5f4d324d5f315f46345f"))),
-            ver=collection.FirmwareVersion(
+                value=bytes.fromhex("090e5057524d5f4d324d5f315f46345f")),
+            ver=collection.ParameterValue(
                 par=bytes.fromhex("0000000201ff02"),
-                value=cdt.OctetString(bytearray(b"1.7.3"))))
+                value=cdt.OctetString(bytearray(b"1.7.3")).encoding))
+        # col2 = Xml50.get_collection(
+        #     m=b"KPZ",
+        #     f_id=collection.ParameterValue(
+        #         par=bytes.fromhex("0000000200ff02"),
+        #         value=bytes.fromhex("090e5057524d5f4d324d5f315f46345f")
+        #     ),
+        #     ver=collection.ParameterValue(
+        #         par=bytes.fromhex("0000000201ff02"),
+        #         value=cdt.OctetString(bytearray(b"1.7.4")).encoding
+        #     )
+        # )
         print(col)
         col.LDN.set_attr(2, bytearray(b"KPZ00001234567890"))  # need for test
         col2 = col.copy()
@@ -124,11 +142,9 @@ class TestType(unittest.TestCase):
             f_id=serID50_M2M_1,
             ver=server_1_7_3)
         # col2 = adapter.get_collection(
-        #     m=b"102",
-        #     f_id=serID_M2M_3,
-        #     ver=collection.FirmwareVersion(
-        #         par=bytes.fromhex("0000000201ff02"),
-        #         value=cdt.OctetString(bytearray(b"1.3.30"))))
+        #     m=b"KPZ",
+        #     f_id=serID50_M2M_1,
+        #     ver=server_1_7_4)
         clock_obj = col.get_object("0.0.1.0.0.255")
         clock_obj.set_attr(3, 120)
         act_cal = col.get_object("0.0.13.0.0.255")
@@ -162,13 +178,13 @@ class TestType(unittest.TestCase):
     def test_get_col_path(self):
         path = Xml3.get_col_path(
             m=b"KPZ",
-            f_id=collection.FirmwareID(
+            f_id=collection.ParameterValue(
                 par=bytes.fromhex("0000600102ff02"),
-                value=cdt.OctetString(bytearray(b'M2M_3'))
+                value=cdt.OctetString(bytearray(b'M2M_3')).encoding
             ),
-            ver=collection.FirmwareVersion(
+            ver=collection.ParameterValue(
                 par=bytes.fromhex("0000000201ff02"),
-                value=cdt.OctetString(bytearray(b"1.4.13+r"))
+                value=cdt.OctetString(bytearray(b"1.4.13+r")).encoding
             )
         )
         print(path)

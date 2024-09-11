@@ -8,7 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 import logging
 from semver import Version as SemVer
-from DLMS_SPODES.cosem_interface_classes.collection import Collection, FirmwareID, FirmwareVersion, ParameterValue, cst, ClassID, ic, ut, cdt, AssociationLN, Template
+from DLMS_SPODES.cosem_interface_classes.collection import Collection, ParameterValue, cst, ClassID, ic, ut, cdt, AssociationLN, Template
 from DLMS_SPODES.cosem_interface_classes.association_ln.ver0 import ObjectListElement, AttributeAccessItem, AccessMode, is_attr_writable
 from DLMS_SPODES.cosem_interface_classes import implementations as impl, collection
 from DLMS_SPODES import exceptions as exc
@@ -109,15 +109,15 @@ class Base(Adapter, ABC):
     @classmethod
     @abstractmethod
     @lru_cache(maxsize=100)
-    def get_col_path(cls, m: bytes, f_id: FirmwareID, ver: FirmwareVersion) -> Path:
+    def get_col_path(cls, m: bytes, f_id: ParameterValue, ver: ParameterValue) -> Path:
         """return Path by parameters"""
 
     @classmethod
     @lru_cache(maxsize=100)
     def _get_collection(cls,
                         m: bytes,
-                        f_id: FirmwareID,
-                        ver: FirmwareVersion) -> Collection:
+                        f_id: ParameterValue,
+                        ver: ParameterValue) -> Collection:
         path = cls.get_col_path(m, f_id, ver)
         logger.info(F"find type {path=}")
         tree = ET.parse(path)
@@ -131,8 +131,8 @@ class Base(Adapter, ABC):
     @classmethod
     def get_collection(cls,
                        m: bytes,
-                       f_id: FirmwareID,
-                       ver: FirmwareVersion) -> Collection:
+                       f_id: ParameterValue,
+                       ver: ParameterValue) -> Collection:
         """return copy of parent Collection"""
         new = cls._get_collection(m, f_id, ver).copy()
         new.set_firm_ver(ver)
@@ -155,9 +155,9 @@ class Xml3(Base):
         if col.manufacturer is not None:
             ET.SubElement(r_n, "manufacturer").text = col.manufacturer.decode("utf-8")
         if col.firm_id is not None:
-            ET.SubElement(r_n, "server_type").text = col.firm_id.value.encoding.hex()
+            ET.SubElement(r_n, "server_type").text = col.firm_id.value.hex()
         if col.firm_ver is not None:
-            ET.SubElement(r_n, "server_ver", attrib={"instance": "1"}).text = str(SemVer.parse(col.firm_ver.value.contents))
+            ET.SubElement(r_n, "server_ver", attrib={"instance": "1"}).text = str(SemVer.parse(col.firm_ver.value[2:]))
         return r_n
 
     @classmethod
@@ -185,21 +185,21 @@ class Xml3(Base):
         if (country := r_n.findtext("country")) is not None:
             col.set_country(collection.CountrySpecificIdentifiers(int(country)))
         if (country_ver := r_n.findtext("country_ver")) is not None:
-            col.set_country_ver(FirmwareVersion(
+            col.set_country_ver(ParameterValue(
                 par=b'\x00\x00\x60\x01\x06\xff\x02',  # 0.0.96.1.6.255:2
-                value=cdt.OctetString(bytearray(country_ver.encode(encoding="ascii")))
+                value=cdt.OctetString(bytearray(country_ver.encode(encoding="ascii"))).encoding
             ))
         if (manufacturer := r_n.findtext("manufacturer")) is not None:
             col.set_manufacturer(manufacturer.encode("utf-8"))
         if (firm_id := r_n.findtext("server_type")) is not None:
-            col.set_firm_id(FirmwareID(
+            col.set_firm_id(ParameterValue(
                 par=b'\x00\x00\x60\x01\x01\xff\x02',  # 0.0.96.1.1.255:2
-                value=cdt.get_instance_and_pdu_from_value(bytes.fromhex(firm_id))[0]
+                value=bytes.fromhex(firm_id)
             ))
         if (firm_ver := r_n.findtext("server_ver")) is not None:
-            col.set_firm_ver(FirmwareVersion(
+            col.set_firm_ver(ParameterValue(
                 par=b'\x00\x00\x00\x02\x01\xff\x02',
-                value=cdt.OctetString(bytearray(firm_ver.encode(encoding="ascii")))
+                value=firm_ver.encode(encoding="ascii")
             ))
         col.spec_map = col.get_spec()
 
@@ -347,13 +347,13 @@ class Xml3(Base):
 
     @classmethod
     @lru_cache(maxsize=100)
-    def get_col_path(cls, m: bytes, f_id: FirmwareID, ver: FirmwareVersion) -> Path:
+    def get_col_path(cls, m: bytes, f_id: ParameterValue, ver: ParameterValue) -> Path:
         """ret: file, is_searched"""
         if (man := cls.get_manufactures_container().get(m)) is None:
             raise AdapterException(F"no support manufacturer: {m}")
-        elif (firm_id := man.get(f_id.value.encoding)) is None:
+        elif (firm_id := man.get(f_id.value)) is None:
             raise AdapterException(F"no support type {f_id}, with manufacturer: {m}")
-        elif path := firm_id.get(semver := SemVer.parse(ver.value.to_str())):
+        elif path := firm_id.get(semver := SemVer.parse(ver.value[2:])):
             logger.info(F"got collection from library by {path=}")
             return path
         else:
@@ -393,7 +393,7 @@ class Xml40(Base):
         return Xml3.get_manufactures_container()
 
     @classmethod
-    def get_col_path(cls, m: bytes, f_id: FirmwareID, ver: FirmwareVersion) -> Path:
+    def get_col_path(cls, m: bytes, f_id: ParameterValue, ver: ParameterValue) -> Path:
         return Xml3.get_col_path(m, f_id, ver)
 
     @classmethod
@@ -542,7 +542,7 @@ class Xml41(Base):
         return Xml3.get_manufactures_container()
 
     @classmethod
-    def get_col_path(cls, m: bytes, f_id: FirmwareID, ver: FirmwareVersion) -> Path:
+    def get_col_path(cls, m: bytes, f_id: ParameterValue, ver: ParameterValue) -> Path:
         return Xml3.get_col_path(m, f_id, ver)
 
     @classmethod
@@ -602,9 +602,9 @@ class Xml41(Base):
         xml_string = ET.tostring(root_node, encoding='cp1251', method='xml')
         if not (man_path := types_path / col.manufacturer.decode("ascii")).exists():
             man_path.mkdir()
-        if not (type_path := man_path / col.firm_id.value.encoding.hex()).exists():
+        if not (type_path := man_path / col.firm_id.value.hex()).exists():
             type_path.mkdir()
-        ver_path = type_path / F"{SemVer.parse(col.firm_ver.value.to_str())}.typ"  # use
+        ver_path = type_path / F"{SemVer.parse(col.firm_ver.value)}.typ"  # use
         with open(ver_path, "wb") as f:
             f.write(xml_string)
             cls.get_manufactures_container().cache_clear()
@@ -673,9 +673,9 @@ class Xml41(Base):
             manufacture_node = ET.SubElement(r_n, "manufacturer")
             manufacture_node.text = col.manufacturer.decode("utf-8")
             server_type_node = ET.SubElement(manufacture_node, "server_type")
-            server_type_node.text = col.firm_id.value.encoding.hex()
+            server_type_node.text = col.firm_id.value.hex()
             firm_ver_node = ET.SubElement(server_type_node, "server_ver", attrib={"instance": "1"})
-            firm_ver_node.text = str(col.firm_ver.get_semver())
+            firm_ver_node.text = str(SemVer.parse(col.firm_ver.value))
         return r_n
 
     @staticmethod
@@ -769,12 +769,13 @@ class Xml41(Base):
                 for firm_ver_node in server_type_node.findall("server_ver"):
                     cols.append(cls.get_collection(
                         m=manufacturer_node.text.encode("utf-8"),
-                        f_id=FirmwareID(
+                        f_id=ParameterValue(
                             par=b'\x00\x00\x60\x01\x01\xff\x02',
-                            value=cdt.get_instance_and_pdu_from_value(bytes.fromhex(server_type_node.text))[0]),
-                        ver=FirmwareVersion(
+                            value=bytes.fromhex(server_type_node.text)
+                        ),
+                        ver=ParameterValue(
                             par=b'\x00\x00\x00\x02\x00\xff\x02',
-                            value=cdt.OctetString(bytearray(firm_ver_node.text.encode(encoding="ascii")))
+                            value=firm_ver_node.text.encode(encoding="ascii")
                         )
                     ))
         for obj in r_n.findall('object'):
@@ -896,7 +897,7 @@ class Xml50(Base):
 
     @classmethod
     def get_template_node_param(cls, parent: ET.Element, tag: str, value: ParameterValue) -> ET.Element:
-        if (old := parent.find(tag)) is not None and (old.findtext("value") == value.value.encoding.hex()) and (old.findtext("par") == value.par.hex()):
+        if (old := parent.find(tag)) is not None and (old.findtext("value") == value.value.hex()) and (old.findtext("par") == value.par.hex()):
             return old
         else:
             return cls.parval2node(parent, tag, value)
@@ -905,7 +906,7 @@ class Xml50(Base):
     def parval2node(parent: ET.Element, tag: str, value: ParameterValue) -> ET.Element:
         new = ET.SubElement(parent, tag)
         ET.SubElement(new, "par").text = value.par.hex()
-        ET.SubElement(new, "value").text = value.value.encoding.hex()
+        ET.SubElement(new, "value").text = value.value.hex()
         return new
 
     @classmethod
@@ -931,9 +932,80 @@ class Xml50(Base):
             path=cls._get_template_path(name),
             template=template)
 
+    @staticmethod
+    def node2parval(node: ET.Element) -> ParameterValue:
+        return ParameterValue(
+            par=bytes.fromhex(node.findtext("par")),
+            value=bytes.fromhex(node.findtext("value"))
+        )
+
     @classmethod
     def get_template(cls, name: str) -> Template:
-        pass
+        path = cls._get_template_path(name)
+        used: collection.UsedAttributes = dict()
+        cols = list()
+        r_n = ET.parse(path).getroot()
+        if not cls._is_header(r_n, Xml50.TEMPLATE_ROOT_TAG, Xml50.VERSION):
+            raise AdapterException(F"Unknown tag: {r_n.tag} with {r_n.attrib}")
+
+        for man_n in r_n.findall("manufacturer"):
+            for fid_n in man_n.findall("firm_id"):
+                for fv_n in fid_n.findall("firm_ver"):
+                    try:
+                        cols.append(cls.get_collection(
+                            m=bytes.fromhex(man_n.findtext("value")),
+                            f_id=cls.node2parval(fid_n),
+                            ver=cls.node2parval(fv_n),
+                        ))
+                    except AdapterException as e:
+                        logger.error(F"collection with: {man_n}/{fid_n}/{fv_n} not load to Template")
+                        continue
+        for obj in r_n.findall('object'):
+            ln: str = obj.attrib.get("ln", 'is absence')
+            obis = cst.LogicalName.from_obis(ln)
+            objs: list[ic.COSEMInterfaceClasses] = list()
+            for col in cols:
+                if not col.is_in_collection(obis):
+                    logger.warning(F"got object with {ln=} not find in collection: {col}")
+                else:
+                    objs.append(col.get_object(obis))
+            used[obis] = set()
+            for attr in obj.findall("attr"):
+                index: int = int(attr.attrib.get("index"))
+                used[obis].add(index)
+                try:
+                    match attr.attrib.get("type", "simple"):
+                        case "simple":
+                            for new_object in objs:
+                                new_object.set_attr(index, attr.text)
+                        case "array" | "struct":
+                            stack = [(list(), iter(attr))]
+                            while stack:
+                                v1, v2 = stack[-1]
+                                v = next(v2, None)
+                                if v is None:
+                                    stack.pop()
+                                elif v.tag == "simple":
+                                    v1.append(v.text)
+                                else:
+                                    v1.append(list())
+                                    stack.append((v1[-1], iter(v)))
+                            for new_object in objs:
+                                new_object.set_attr(index, v1)
+                except exc.ITEApplication as e:
+                    logger.error(F"Can't fill {new_object} attr: {index}. {e}")
+                except IndexError:
+                    logger.error(F'Object "{new_object}" not has attr: {index}')
+                except TypeError as e:
+                    logger.error(F'Object {new_object} attr:{index} do not write, encoding wrong : {e}')
+                except ValueError as e:
+                    logger.error(F'Object {new_object} attr:{index} do not fill: {e}')
+                except AttributeError as e:
+                    logger.error(F'Object {new_object} attr:{index} do not fill: {e}')
+        return Template(
+            collections=cols,
+            used=used,
+            verified=bool(int(r_n.findtext("verified", default="0"))))
 
     @classmethod
     def set_parameters(cls, r_n: ET.Element, col: Collection):
@@ -943,51 +1015,42 @@ class Xml50(Base):
         if (country := r_n.findtext("country")) is not None:
             col.set_country(collection.CountrySpecificIdentifiers(int(country)))
         if (country_ver_el := r_n.find("country_ver")) is not None:
-            col.set_country_ver(FirmwareVersion(
-                par=bytes.fromhex(country_ver_el.attrib.get("par", '')),
-                value=cdt.get_instance_and_pdu_from_value(bytes.fromhex(country_ver_el.text))[0]
-            ))
+            col.set_firm_id(cls.node2parval(country_ver_el))
         if (manufacturer := r_n.findtext("manufacturer")) is not None:
             col.set_manufacturer(bytes.fromhex(manufacturer))
         if (firm_id_el := r_n.find("firm_id")) is not None:
-            col.set_firm_id(FirmwareID(
-                par=bytes.fromhex(firm_id_el.findtext("par", "")),
-                value=cdt.get_instance_and_pdu_from_value(bytes.fromhex(firm_id_el.findtext("value")))[0]
-            ))
+            col.set_firm_id(cls.node2parval(firm_id_el))
         if (firm_ver_el := r_n.find("firm_ver")) is not None:
-            col.set_firm_ver(FirmwareVersion(
-                par=bytes.fromhex(firm_ver_el.findtext("par", "")),
-                value=cdt.get_instance_and_pdu_from_value(bytes.fromhex(firm_ver_el.findtext("value")))[0]
-            ))
+            col.set_firm_ver(cls.node2parval(firm_ver_el))
         col.spec_map = col.get_spec()
 
     @classmethod
     @lru_cache(maxsize=100)
-    def get_col_path(cls, m: bytes, f_id: FirmwareID, ver: FirmwareVersion) -> Path:
+    def get_col_path(cls, m: bytes, f_id: ParameterValue, ver: ParameterValue) -> Path:
         """ret: file, is_searched"""
         if (man := cls.get_manufactures_container().get(m)) is None:
             raise AdapterException(F"no support manufacturer: {m}")
-        elif (firm_id := man.get(f_id.value.encoding)) is None:
+        elif (firm_id := man.get(f_id.value)) is None:
             raise AdapterException(F"no support type {f_id}, with manufacturer: {m}")
-        elif (path := firm_id.get(ver.value.encoding)) is not None:
+        elif (path := firm_id.get(ver.value)) is not None:
             logger.info(F"got collection from library by {path=}")
             return path
-        elif SemVer.is_valid(ver.value.contents.decode("utf-8", "ignore")):
+        elif SemVer.is_valid((ver_ := cdt.get_instance_and_pdu_from_value(ver.value)[0].contents).decode("utf-8", "ignore")):
             logger.warning(F"try find compatible version...")
-            semver = ver.get_semver()
-            compatible: list[SemVer] = list()
-            plain: list[FirmwareVer] = list()
+            semver = SemVer.parse(ver_)
             for v in firm_id.keys():
-                if SemVer.is_valid(v.decode("utf-8", "ignore")) and (sv := SemVer.parse(v)).is_compatible(semver):
-                    compatible.append(sv)
-                    plain.append(v)
-            if len(compatible) == 0:
-                logger.error(F"compatible version was not find")
+                data, _ = cdt.get_instance_and_pdu_from_value(v)
+                d = data.decode()
+                if (
+                    SemVer.is_valid(d.decode("utf-8", "ignore")) and
+                    SemVer.parse(d, True) == semver
+                ):
+                    return firm_id[v]
             else:
-                return firm_id[plain[compatible.index(max(compatible))]]
+                raise AdapterException(F"was no find compatible version {ver} with manufacturer: {m}, identifier: {f_id}")
         else:
-            # raise AdapterException(F"no support version {ver} with manufacturer: {m}, identifier: {f_id}")
-            raise Xml3.get_col_path(m, f_id, ver)
+            raise AdapterException(F"no support version {ver} with manufacturer: {m}, identifier: {f_id}")
+            # raise Xml3.get_col_path(m, f_id, ver)
 
     @staticmethod
     @lru_cache(1)
@@ -1038,10 +1101,10 @@ class Xml50(Base):
     def create_type(cls, col: Collection):
         if not isinstance(col.manufacturer, bytes):
             raise AdapterException(F"{col} hasn't manufacturer parameter")
-        if not isinstance(col.firm_id, FirmwareID):
-            raise AdapterException(F"{col} hasn't {FirmwareID.__class__.__name__} parameter")
-        if not isinstance(col.firm_ver, FirmwareVersion):
-            raise AdapterException(F"{col} hasn't {FirmwareVersion.__class__.__name__} parameter")
+        if not isinstance(col.firm_id, ParameterValue):
+            raise AdapterException(F"{col} hasn't <Firmware ID> parameter")
+        if not isinstance(col.firm_ver, ParameterValue):
+            raise AdapterException(F"{col} hasn't <Firmware Version> parameter")
         root_node = cls._get_root_node(col, Xml50.TYPE_ROOT_TAG)
         objs: dict[cst.LogicalName, set[int]] = dict()
         """key: LN, value: not writable and readable container"""
@@ -1093,10 +1156,9 @@ class Xml50(Base):
         xml_string = ET.tostring(root_node, encoding="utf-8", method='xml')
         if not (man_path := types_path / col.manufacturer.hex()).exists():
             man_path.mkdir()
-        if not (type_path := man_path / col.firm_id.value.encoding.hex()).exists():
+        if not (type_path := man_path / col.firm_id.value.hex()).exists():
             type_path.mkdir()
-        ver_path = type_path / F"{col.firm_ver.value.encoding.hex()}.xml"
+        ver_path = type_path / F"{col.firm_ver.value.hex()}.xml"
         with open(ver_path, "wb") as f:
             f.write(xml_string)
             cls.get_manufactures_container.cache_clear()
-

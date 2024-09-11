@@ -1,8 +1,7 @@
 from abc import ABC, abstractmethod
 from DLMS_SPODES.cosem_interface_classes.collection import (
     Collection,
-    FirmwareID,
-    FirmwareVersion,
+    ParameterValue,
     Template)
 from semver import Version as SemVer
 
@@ -36,8 +35,8 @@ class Adapter(ABC):
     @abstractmethod
     def get_collection(cls,
                        m: bytes,
-                       f_id: FirmwareID,
-                       ver: FirmwareVersion) -> Collection:
+                       f_id: ParameterValue,
+                       ver: ParameterValue) -> Collection:
         """get Collection by m: manufacturer, t: type, ver: version"""
 
     @classmethod
