@@ -1015,7 +1015,7 @@ class Xml50(Base):
         if (country := r_n.findtext("country")) is not None:
             col.set_country(collection.CountrySpecificIdentifiers(int(country)))
         if (country_ver_el := r_n.find("country_ver")) is not None:
-            col.set_firm_id(cls.node2parval(country_ver_el))
+            col.set_country_ver(cls.node2parval(country_ver_el))
         if (manufacturer := r_n.findtext("manufacturer")) is not None:
             col.set_manufacturer(bytes.fromhex(manufacturer))
         if (firm_id_el := r_n.find("firm_id")) is not None:
@@ -1108,12 +1108,13 @@ class Xml50(Base):
         root_node = cls._get_root_node(col, Xml50.TYPE_ROOT_TAG)
         objs: dict[cst.LogicalName, set[int]] = dict()
         """key: LN, value: not writable and readable container"""
+        reduce_ln = collection.ln_pattern.LNPattern("0.0.(40,42).0.0.255")
         for ass in filter(lambda it: it.logical_name.e != 0, col.get_objects_by_class_id(ClassID.ASSOCIATION_LN)):
             if ass.object_list is None:
                 logger.warning(F"for {ass} got empty <object_list>. skip it")
                 continue
             for obj_el in ass.object_list:
-                if str(obj_el.logical_name) in ("0.0.40.0.0.255", "0.0.42.0.0.255"):
+                if reduce_ln == obj_el.logical_name:
                     """skip LDN and current_association"""
                     continue
                 elif obj_el.logical_name in objs:
@@ -1121,7 +1122,10 @@ class Xml50(Base):
                 else:
                     objs[obj_el.logical_name] = set()
                 for access in obj_el.access_rights.attribute_access[1:]:  # without ln
-                    if not access.access_mode.is_writable() and access.access_mode.is_readable():
+                    if (
+                        access.access_mode.is_readable()
+                        and not access.access_mode.is_writable()
+                    ):
                         objs[obj_el.logical_name].add(int(access.attribute_id))
         o2 = list()
         """container sort by AssociationLN first"""
