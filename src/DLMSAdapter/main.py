@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import logging
 from DLMS_SPODES.cosem_interface_classes.collection import (
     Collection,
     ParameterValue,
@@ -6,6 +7,7 @@ from DLMS_SPODES.cosem_interface_classes.collection import (
 from semver import Version as SemVer
 
 
+logger = logging.getLogger(__name__)
 type_title: str = "DLMSServerType"
 data_title: str = "DLMSServerData"
 template_title: str = "DLMSServerTemplate"
@@ -54,3 +56,29 @@ class Adapter(ABC):
 
 class AdapterException(Exception):
     """"""
+
+
+class Gag(Adapter):
+    @classmethod
+    def create_type(cls, col: Collection):
+        logger.warning(F"{cls.__name__} not support <get_template>")
+
+    @classmethod
+    def get_collection(cls, m: bytes, f_id: ParameterValue, ver: ParameterValue) -> Collection:
+        raise AdapterException(F"{cls.__name__} not support <get_collection>")
+
+    @classmethod
+    def keep_data(cls, col: Collection, ass_id: int = 3) -> bool:
+        raise AdapterException(F"{cls.__name__} not support <keep_data>")
+
+    @classmethod
+    def get_data(cls, col: Collection):
+        raise AdapterException(F"{cls.__name__} not support <get_data>")
+
+    @classmethod
+    def create_template(cls, name: str, template: Template):
+        raise AdapterException(F"{cls.__name__} not support <create_template>")
+
+    @classmethod
+    def get_template(cls, name: str) -> Template:
+        raise AdapterException(F"{cls.__name__} not support <get_template>")
