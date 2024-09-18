@@ -125,6 +125,7 @@ class TestType(unittest.TestCase):
         print(col)
         col.LDN.set_attr(2, bytearray(b"KPZ00001234567890"))  # need for test
         col2 = col.copy()
+        col2.LDN.set_attr(2, bytearray(b"KPZ00001234567891"))  # need for test
         # keep path
         clock_obj = col.get_object("0.0.1.0.0.255")
         clock_obj.set_attr(3, 100)  # change any value for test

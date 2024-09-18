@@ -23,21 +23,21 @@ class Adapter(ABC):
 
     @classmethod
     @abstractmethod
+    def get_collection(cls,
+                       m: bytes,
+                       f_id: ParameterValue,
+                       ver: ParameterValue) -> Collection:
+        """get Collection by m: manufacturer, t: type, ver: version. AdapterException if not find collection by ID """
+
+    @classmethod
+    @abstractmethod
     def keep_data(cls, col: Collection, ass_id: int = 3) -> bool:
         """Save attributes WRITABLE and STATIC if possible. Use LDN as ID"""
 
     @classmethod
     @abstractmethod
     def get_data(cls, col: Collection):
-        """ set attribute values from file by. validation ID's """
-
-    @classmethod
-    @abstractmethod
-    def get_collection(cls,
-                       m: bytes,
-                       f_id: ParameterValue,
-                       ver: ParameterValue) -> Collection:
-        """get Collection by m: manufacturer, t: type, ver: version"""
+        """ set attribute values from file by. validation ID's. AdapterException if not find data by ID"""
 
     @classmethod
     @abstractmethod
@@ -54,5 +54,3 @@ class Adapter(ABC):
 
 class AdapterException(Exception):
     """"""
-
-

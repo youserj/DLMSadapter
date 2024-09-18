@@ -63,7 +63,10 @@ class Base(Adapter, ABC):
     def get_data(cls, col: Collection):
         path = cls._get_keep_path(col)
         logger.info(F"find data {path=}")
-        tree = ET.parse(path)
+        try:
+            tree = ET.parse(path)
+        except FileNotFoundError as e:
+            raise AdapterException(F"not find data for {col}: {e}")
         cls.root2data(
             r_n=tree.getroot(),
             col=col
@@ -1166,3 +1169,6 @@ class Xml50(Base):
         with open(ver_path, "wb") as f:
             f.write(xml_string)
             cls.get_manufactures_container.cache_clear()
+
+
+xml50 = Xml50()
