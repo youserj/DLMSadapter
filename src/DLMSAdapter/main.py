@@ -58,7 +58,7 @@ class AdapterException(Exception):
     """"""
 
 
-class Gag(Adapter):
+class __Gag(Adapter):
     @classmethod
     def create_type(cls, col: Collection):
         logger.warning(F"{cls.__name__} not support <get_template>")
@@ -82,3 +82,6 @@ class Gag(Adapter):
     @classmethod
     def get_template(cls, name: str) -> Template:
         raise AdapterException(F"{cls.__name__} not support <get_template>")
+
+
+gag = __Gag()
