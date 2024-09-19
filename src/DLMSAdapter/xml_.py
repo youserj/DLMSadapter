@@ -141,8 +141,23 @@ class Base(Adapter, ABC):
         new.set_firm_ver(ver)
         return new
 
+    @classmethod
+    def get_templates(cls) -> list[str]:
+        raise AdapterException(F"{cls.__name__} not have <templates>")
 
-class Xml3(Base):
+
+class __GetCollectionMixin1(Base, ABC):
+    """"""
+    def get_collections(self) -> dict[bytes, [dict[bytes, tuple[bytes]]]]:
+        ret: dict[bytes, [dict[bytes, tuple[bytes]]]] = dict()
+        for m_k, m_v in self.get_manufactures_container().items():
+            ret[m_k] = dict()
+            for f_id_k, f_id_v in m_v.items():
+                ret[m_k][f_id_k] = tuple(f_id_v.keys())
+        return ret
+
+
+class Xml3(__GetCollectionMixin1, Base):
     VERSION: SemVer = SemVer(3, 2)
     TYPE_ROOT_TAG: str = "Objects"
     DATA_ROOT_TAG: str = "Objects"
@@ -356,7 +371,7 @@ class Xml3(Base):
             raise AdapterException(F"no support manufacturer: {m}")
         elif (firm_id := man.get(f_id.value)) is None:
             raise AdapterException(F"no support type {f_id}, with manufacturer: {m}")
-        elif path := firm_id.get(semver := SemVer.parse(ver.value[2:])):
+        elif path := firm_id.get(semver := SemVer.parse(ver.value[2:], True)):
             logger.info(F"got collection from library by {path=}")
             return path
         else:
@@ -377,7 +392,7 @@ class Xml3(Base):
         raise AdapterException(F"not support <get_template> for {cls.VERSION}")
 
 
-class Xml40(Base):
+class Xml40(__GetCollectionMixin1, Base):
     VERSION: SemVer = SemVer(4, 0)
     TYPE_ROOT_TAG = Xml3.TYPE_ROOT_TAG
     DATA_ROOT_TAG = Xml3.DATA_ROOT_TAG
@@ -529,7 +544,7 @@ class Xml40(Base):
         return col
 
 
-class Xml41(Base):
+class Xml41(__GetCollectionMixin1, Base):
     VERSION: SemVer = SemVer(4, 1)
     TYPE_ROOT_TAG = Xml3.TYPE_ROOT_TAG
     DATA_ROOT_TAG = Xml3.DATA_ROOT_TAG
@@ -778,7 +793,7 @@ class Xml41(Base):
                         ),
                         ver=ParameterValue(
                             par=b'\x00\x00\x00\x02\x00\xff\x02',
-                            value=firm_ver_node.text.encode(encoding="ascii")
+                            value=cdt.OctetString(bytearray(firm_ver_node.text.encode(encoding="ascii"))).encoding
                         )
                     ))
         for obj in r_n.findall('object'):
@@ -829,7 +844,7 @@ class Xml41(Base):
             verified=bool(int(r_n.findtext("verified", default="0"))))
 
 
-class Xml50(Base):
+class Xml50(__GetCollectionMixin1, Base):
     """"""
     VERSION = SemVer(5, 0)
     TYPE_ROOT_TAG = "DLMSServerType"
@@ -924,7 +939,10 @@ class Xml50(Base):
 
     @staticmethod
     def _get_template_path(name: str) -> Path:
-        return (TEMPLATE_PATH / name).with_suffix(".xml")
+        path = TEMPLATE_PATH / name
+        if name.find('.') == -1:
+            path = path.with_suffix(".xml")
+        return path
 
     @classmethod
     def create_template(cls,
@@ -945,12 +963,11 @@ class Xml50(Base):
     @classmethod
     def get_template(cls, name: str) -> Template:
         path = cls._get_template_path(name)
+        r_n = ET.parse(path).getroot()
         used: collection.UsedAttributes = dict()
         cols = list()
-        r_n = ET.parse(path).getroot()
         if not cls._is_header(r_n, Xml50.TEMPLATE_ROOT_TAG, Xml50.VERSION):
-            raise AdapterException(F"Unknown tag: {r_n.tag} with {r_n.attrib}")
-
+            return xml41.get_template(name)
         for man_n in r_n.findall("manufacturer"):
             for fid_n in man_n.findall("firm_id"):
                 for fv_n in fid_n.findall("firm_ver"):
@@ -1170,5 +1187,17 @@ class Xml50(Base):
             f.write(xml_string)
             cls.get_manufactures_container.cache_clear()
 
+    @classmethod
+    def get_templates(cls) -> list[str]:
+        """return name with stem"""
+        ret = list()
+        for path in TEMPLATE_PATH.iterdir():
+            if path.is_file() and path.suffix in (".xml", ".tmp"):
+                ret.append(path.name)
+        return ret
 
+
+xml3 = Xml3()
+xml4 = Xml40()
+xml41 = Xml41()
 xml50 = Xml50()

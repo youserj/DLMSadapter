@@ -1,7 +1,7 @@
 import unittest
 from DLMS_SPODES.cosem_interface_classes import collection, overview
 from DLMS_SPODES.types import cdt, cst
-from src.DLMSAdapter.xml_ import Xml41, Xml40, Xml3, ET, Xml50
+from src.DLMSAdapter.xml_ import Xml41, Xml40, Xml3, ET, xml50
 import logging
 
 server_1_4_15 = collection.ParameterValue(
@@ -42,17 +42,19 @@ logger.level = logging.INFO
 
 class TestType(unittest.TestCase):
     def test_create_adapter(self):
-        adapter_ = Xml50()
+        adapter_ = xml50()
 
     def test_create_type(self):
         print(colXXX)
-        Xml50.create_type(colXXX)
-        col = Xml50.get_collection(colXXX.manufacturer, colXXX.firm_id, colXXX.firm_ver)
+        xml50.create_type(colXXX)
+        col = xml50.get_collection(colXXX.manufacturer, colXXX.firm_id, colXXX.firm_ver)
         print(col)
 
     def test_get_man(self):
         c = Xml3.get_manufactures_container()
         print(c)
+        mans = xml50.get_collections()
+        print(mans)
 
     def test_get_obj_list(self):
         # todo: don't work now
@@ -75,7 +77,7 @@ class TestType(unittest.TestCase):
             else:
                 ass.object_list.remove(el)
         col.set_firm_id(value=collection.ParameterValue(b'', cdt.OctetString("00").encoding), force=True)
-        Xml50.create_type(col)
+        xml50.create_type(col)
         print(ass.object_list.encoding.hex())
 
     def test_get_collection41(self):
@@ -103,7 +105,7 @@ class TestType(unittest.TestCase):
         print(col2)
 
     def test_get_collection50(self):
-        col = Xml50.get_collection(
+        col = xml50.get_collection(
             m=b"KPZ",
             f_id=collection.ParameterValue(
                 par=bytes.fromhex("0000000200ff02"),
@@ -111,7 +113,7 @@ class TestType(unittest.TestCase):
             ver=collection.ParameterValue(
                 par=bytes.fromhex("0000000201ff02"),
                 value=cdt.OctetString(bytearray(b"1.7.3")).encoding))
-        # col2 = Xml50.get_collection(
+        # col2 = xml50.get_collection(
         #     m=b"KPZ",
         #     f_id=collection.ParameterValue(
         #         par=bytes.fromhex("0000000200ff02"),
@@ -125,19 +127,19 @@ class TestType(unittest.TestCase):
         print(col)
         col.LDN.set_attr(2, bytearray(b"KPZ00001234567890"))  # need for test
         col2 = col.copy()
-        col2.LDN.set_attr(2, bytearray(b"KPZ00001234567891"))  # need for test
+        # col2.LDN.set_attr(2, bytearray(b"KPZ00001234567891"))  # need for test
         # keep path
         clock_obj = col.get_object("0.0.1.0.0.255")
         clock_obj.set_attr(3, 100)  # change any value for test
         iccid_obj = col.get_object("0.128.25.6.0.255")
         iccid_obj.set_attr(2, "01 02 03 04 05")
-        Xml50.keep_data(col)
+        xml50.keep_data(col)
         # get data
-        Xml50.get_data(col2)
+        xml50.get_data(col2)
         print(col2)
 
     def test_template(self):
-        adapter = Xml50
+        adapter = xml50
         col = adapter.get_collection(
             m=b"KPZ",
             f_id=serID50_M2M_1,

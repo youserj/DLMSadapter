@@ -31,6 +31,10 @@ class Adapter(ABC):
                        ver: ParameterValue) -> Collection:
         """get Collection by m: manufacturer, t: type, ver: version. AdapterException if not find collection by ID """
 
+    @abstractmethod
+    def get_collections(self) -> dict[bytes, [dict[bytes, tuple[bytes]]]]:
+        """return container all manufacturer, with firm_ID, firm_ver"""
+
     @classmethod
     @abstractmethod
     def keep_data(cls, col: Collection, ass_id: int = 3) -> bool:
@@ -52,6 +56,11 @@ class Adapter(ABC):
     @abstractmethod
     def get_template(cls, name: str) -> Template:
         """load template by <name>"""
+
+    @classmethod
+    @abstractmethod
+    def get_templates(cls) -> list[str]:
+        """return all templates name"""
 
 
 class AdapterException(Exception):
@@ -82,6 +91,13 @@ class __Gag(Adapter):
     @classmethod
     def get_template(cls, name: str) -> Template:
         raise AdapterException(F"{cls.__name__} not support <get_template>")
+
+    @classmethod
+    def get_templates(cls) -> list[str]:
+        raise AdapterException(F"{cls.__name__} not have <templates>")
+
+    def get_collections(self) -> dict[bytes, [dict[bytes, tuple[bytes]]]]:
+        raise AdapterException(F"{self.__name__} not have <manufacturers>")
 
 
 gag = __Gag()
