@@ -45,12 +45,9 @@ class Adapter(ABC):
     def get_data(cls, col: Collection):
         """ set attribute values from file by. validation ID's. AdapterException if not find data by ID"""
 
-    @classmethod
     @abstractmethod
-    def set_template(cls,
-                     name: str,
-                     template: Template):
-        """keep used values to template by collections with <name>"""
+    def set_template(self, template: Template):
+        """keep used values to template by collections"""
 
     @classmethod
     @abstractmethod
@@ -84,9 +81,8 @@ class __Gag(Adapter):
     def get_data(cls, col: Collection):
         raise AdapterException(F"{cls.__name__} not support <get_data>")
 
-    @classmethod
-    def set_template(cls, name: str, template: Template):
-        raise AdapterException(F"{cls.__name__} not support <create_template>")
+    def set_template(self, template: Template):
+        raise AdapterException(F"{self.__class__.__name__} not support <create_template>")
 
     @classmethod
     def get_template(cls, name: str) -> Template:

@@ -153,8 +153,8 @@ class TestType(unittest.TestCase):
         act_cal = col.get_object("0.0.13.0.0.255")
         act_cal.day_profile_table_passive.append((1, [("11:00", "01 01 01 01 01 01", 1)]))
         adapter.set_template(
-            name="template_test1",
             template=collection.Template(
+                name="template_test1",
                 collections=[
                     col,
                     # col2

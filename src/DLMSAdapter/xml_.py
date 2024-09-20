@@ -157,6 +157,86 @@ class __GetCollectionMixin1(Base, ABC):
         return ret
 
 
+class __SetTemplateMixin1(Base, ABC):
+    @staticmethod
+    def temp2root(r_n: ET.Element,
+                  path: Path,
+                  template: Template):
+        used_copy = copy.deepcopy(template.used)
+        r_n.attrib["decode"] = "1"
+        if template.verified:
+            r_n.attrib["verified"] = "1"
+        for col in template.collections:
+            for ln, indexes in copy.copy(used_copy).items():
+                try:
+                    obj = col.get_object(ln)
+                    object_node = ET.SubElement(
+                        r_n,
+                        "object",
+                        attrib={"ln": obj.logical_name.get_report().msg})
+                    for i in tuple(indexes):
+                        attr = obj.get_attr(i)
+                        if isinstance(attr, cdt.CommonDataType):
+                            attr_el = ET.SubElement(
+                                object_node,
+                                "attr",
+                                {"name": obj.get_attr_element(i).NAME,
+                                 "index": str(i)})
+                            if isinstance(attr, cdt.SimpleDataType):
+                                attr_el.text = str(attr)
+                            elif isinstance(attr, cdt.ComplexDataType):
+                                attr_el.attrib["type"] = "array" if attr.TAG == b'\x01' else "struct"  # todo: make better
+                                stack: list = [(attr_el, "attr_el_name", iter(attr))]
+                                while stack:
+                                    node, a_name, value_it = stack[-1]
+                                    value = next(value_it, None)
+                                    if value:
+                                        if not isinstance(a_name, str):
+                                            a_name = next(a_name).NAME
+                                        if isinstance(value, cdt.Array):
+                                            stack.append((ET.SubElement(node,
+                                                                        "array",
+                                                                        attrib={"name": a_name}), "ar_name", iter(value)))
+                                        elif isinstance(value, cdt.Structure):
+                                            stack.append((ET.SubElement(node, "struct"), iter(value.ELEMENTS), iter(value)))
+                                        else:
+                                            ET.SubElement(node,
+                                                          "simple",
+                                                          attrib={"name": a_name}).text = str(value)
+                                    else:
+                                        stack.pop()
+                            indexes.remove(i)
+                        else:
+                            logger.error(F"skip record {obj}:attr={i} with value={attr}")
+                    if len(indexes) == 0:
+                        used_copy.pop(ln)
+                except exc.NoObject as e:
+                    logger.warning(F"skip obj with {ln=} in {template.collections.index(col)} collection: {e}")
+                    continue
+            if len(used_copy) == 0:
+                logger.info(F"success decoding: used {template.collections.index(col) + 1} from {len(template.collections)} collections")
+                break
+        if len(used_copy) != 0:
+            raise ValueError(F"failed decoding: {used_copy}")
+        with open(path, mode="wb") as f:
+            f.write(ET.tostring(
+                element=r_n,
+                encoding="utf-8",
+                method="xml",
+                xml_declaration=True))
+
+    @classmethod
+    @abstractmethod
+    def _get_template_root_node(cls, collections: list[Collection]) -> ET.Element:
+        """create and return root node with header"""
+
+    def set_template(self, template: Template):
+        self.temp2root(
+            r_n=self._get_template_root_node(collections=template.collections),
+            path=self._get_template_path(template.name),
+            template=template)
+
+
 class Xml3(__GetCollectionMixin1, Base):
     VERSION: SemVer = SemVer(3, 2)
     TYPE_ROOT_TAG: str = "Objects"
@@ -381,11 +461,8 @@ class Xml3(__GetCollectionMixin1, Base):
             except ValueError:
                 raise AdapterException(F"no support version {ver} with manufacturer: {m}, identifier: {f_id}")
 
-    @classmethod
-    def set_template(cls,
-                     name: str,
-                     template: Template):
-        raise AdapterException(F"not support <create_template> for {cls.VERSION}")
+    def set_template(self, template: Template):
+        raise AdapterException(F"not support <create_template> for {self.VERSION}")
 
     @classmethod
     def get_template(cls, name: str) -> Template:
@@ -422,9 +499,8 @@ class Xml40(__GetCollectionMixin1, Base):
     def set_data(cls, col: Collection, ass_id: int = 3) -> bool:
         return Xml3.set_data(col)
 
-    @classmethod
-    def set_template(cls, name: str, template: Template):
-        Xml3.set_template(name, template)
+    def set_template(self, template: Template):
+        xml3.set_template(template)
 
     @classmethod
     def get_template(cls, name: str) -> Template:
@@ -544,7 +620,7 @@ class Xml40(__GetCollectionMixin1, Base):
         return col
 
 
-class Xml41(__GetCollectionMixin1, Base):
+class Xml41(__GetCollectionMixin1, __SetTemplateMixin1, Base):
     VERSION: SemVer = SemVer(4, 1)
     TYPE_ROOT_TAG = Xml3.TYPE_ROOT_TAG
     DATA_ROOT_TAG = Xml3.DATA_ROOT_TAG
@@ -696,82 +772,6 @@ class Xml41(__GetCollectionMixin1, Base):
             firm_ver_node.text = str(SemVer.parse(col.firm_ver.value))
         return r_n
 
-    @staticmethod
-    def temp2root(r_n: ET.Element,
-                  path: Path,
-                  template: Template):
-        used_copy = copy.deepcopy(template.used)
-        r_n.attrib["decode"] = "1"
-        if template.verified:
-            r_n.attrib["verified"] = "1"
-        for col in template.collections:
-            for ln, indexes in copy.copy(used_copy).items():
-                try:
-                    obj = col.get_object(ln)
-                    object_node = ET.SubElement(
-                        r_n,
-                        "object",
-                        attrib={"ln": obj.logical_name.get_report().msg})
-                    for i in tuple(indexes):
-                        attr = obj.get_attr(i)
-                        if isinstance(attr, cdt.CommonDataType):
-                            attr_el = ET.SubElement(
-                                object_node,
-                                "attr",
-                                {"name": obj.get_attr_element(i).NAME,
-                                 "index": str(i)})
-                            if isinstance(attr, cdt.SimpleDataType):
-                                attr_el.text = str(attr)
-                            elif isinstance(attr, cdt.ComplexDataType):
-                                attr_el.attrib["type"] = "array" if attr.TAG == b'\x01' else "struct"  # todo: make better
-                                stack: list = [(attr_el, "attr_el_name", iter(attr))]
-                                while stack:
-                                    node, a_name, value_it = stack[-1]
-                                    value = next(value_it, None)
-                                    if value:
-                                        if not isinstance(a_name, str):
-                                            a_name = next(a_name).NAME
-                                        if isinstance(value, cdt.Array):
-                                            stack.append((ET.SubElement(node,
-                                                                        "array",
-                                                                        attrib={"name": a_name}), "ar_name", iter(value)))
-                                        elif isinstance(value, cdt.Structure):
-                                            stack.append((ET.SubElement(node, "struct"), iter(value.ELEMENTS), iter(value)))
-                                        else:
-                                            ET.SubElement(node,
-                                                          "simple",
-                                                          attrib={"name": a_name}).text = str(value)
-                                    else:
-                                        stack.pop()
-                            indexes.remove(i)
-                        else:
-                            logger.error(F"skip record {obj}:attr={i} with value={attr}")
-                    if len(indexes) == 0:
-                        used_copy.pop(ln)
-                except exc.NoObject as e:
-                    logger.warning(F"skip obj with {ln=} in {template.collections.index(col)} collection: {e}")
-                    continue
-            if len(used_copy) == 0:
-                logger.info(F"success decoding: used {template.collections.index(col) + 1} from {len(template.collections)} collections")
-                break
-        if len(used_copy) != 0:
-            raise ValueError(F"failed decoding: {used_copy}")
-        with open(path, mode="wb") as f:
-            f.write(ET.tostring(
-                element=r_n,
-                encoding="utf-8",
-                method="xml",
-                xml_declaration=True))
-
-    @classmethod
-    def set_template(cls,
-                     name: str,
-                     template: Template):
-        cls.temp2root(
-            r_n=cls._get_template_root_node(collections=template.collections),
-            path=cls._get_template_path(name),
-            template=template)
-
     @classmethod
     def get_template(cls, name: str) -> Template:
         path = cls._get_template_path(name)
@@ -844,7 +844,7 @@ class Xml41(__GetCollectionMixin1, Base):
             verified=bool(int(r_n.findtext("verified", default="0"))))
 
 
-class Xml50(__GetCollectionMixin1, Base):
+class Xml50(__GetCollectionMixin1, __SetTemplateMixin1, Base):
     """"""
     VERSION = SemVer(5, 0)
     TYPE_ROOT_TAG = "DLMSServerType"
@@ -939,19 +939,7 @@ class Xml50(__GetCollectionMixin1, Base):
 
     @staticmethod
     def _get_template_path(name: str) -> Path:
-        path = TEMPLATE_PATH / name
-        if name.find('.') == -1:
-            path = path.with_suffix(".xml")
-        return path
-
-    @classmethod
-    def set_template(cls,
-                     name: str,
-                     template: Template):
-        Xml41.temp2root(
-            r_n=cls._get_template_root_node(collections=template.collections),
-            path=cls._get_template_path(name),
-            template=template)
+        return (TEMPLATE_PATH / name).with_suffix(".xml")
 
     @staticmethod
     def node2parval(node: ET.Element) -> ParameterValue:
@@ -1023,6 +1011,7 @@ class Xml50(__GetCollectionMixin1, Base):
                 except AttributeError as e:
                     logger.error(F'Object {new_object} attr:{index} do not fill: {e}')
         return Template(
+            name=name,
             collections=cols,
             used=used,
             verified=bool(int(r_n.findtext("verified", default="0"))))
@@ -1189,11 +1178,11 @@ class Xml50(__GetCollectionMixin1, Base):
 
     @classmethod
     def get_templates(cls) -> list[str]:
-        """return name with stem"""
+        """return stem"""
         ret = list()
         for path in TEMPLATE_PATH.iterdir():
-            if path.is_file() and path.suffix in (".xml", ".tmp"):
-                ret.append(path.name)
+            if path.is_file() and path.suffix == ".xml":
+                ret.append(path.stem)
         return ret
 
 
