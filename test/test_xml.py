@@ -46,7 +46,7 @@ class TestType(unittest.TestCase):
 
     def test_create_type(self):
         print(colXXX)
-        xml50.create_type(colXXX)
+        xml50.set_collection(colXXX)
         col = xml50.get_collection(colXXX.manufacturer, colXXX.firm_id, colXXX.firm_ver)
         print(col)
 
@@ -77,7 +77,7 @@ class TestType(unittest.TestCase):
             else:
                 ass.object_list.remove(el)
         col.set_firm_id(value=collection.ParameterValue(b'', cdt.OctetString("00").encoding), force=True)
-        xml50.create_type(col)
+        xml50.set_collection(col)
         print(ass.object_list.encoding.hex())
 
     def test_get_collection41(self):
@@ -99,7 +99,7 @@ class TestType(unittest.TestCase):
         clock_obj.set_attr(3, 100)  # change any value for test
         iccid_obj = col.get_object("0.128.25.6.0.255")
         iccid_obj.set_attr(2, "01 02 03 04 05")
-        Xml41.keep_data(col)
+        Xml41.set_data(col)
         # get data
         Xml41.get_data(col2)
         print(col2)
@@ -133,7 +133,7 @@ class TestType(unittest.TestCase):
         clock_obj.set_attr(3, 100)  # change any value for test
         iccid_obj = col.get_object("0.128.25.6.0.255")
         iccid_obj.set_attr(2, "01 02 03 04 05")
-        xml50.keep_data(col)
+        xml50.set_data(col)
         # get data
         xml50.get_data(col2)
         print(col2)
@@ -152,7 +152,7 @@ class TestType(unittest.TestCase):
         clock_obj.set_attr(3, 120)
         act_cal = col.get_object("0.0.13.0.0.255")
         act_cal.day_profile_table_passive.append((1, [("11:00", "01 01 01 01 01 01", 1)]))
-        adapter.create_template(
+        adapter.set_template(
             name="template_test1",
             template=collection.Template(
                 collections=[

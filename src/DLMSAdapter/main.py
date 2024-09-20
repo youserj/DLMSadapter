@@ -20,7 +20,7 @@ class Adapter(ABC):
 
     @classmethod
     @abstractmethod
-    def create_type(cls, col: Collection):
+    def set_collection(cls, col: Collection):
         """not safety of type keeping from collection(source) to destination(file(xml, json,...), sql, etc...). Save all attributes. For types only STATIC save """
 
     @classmethod
@@ -37,7 +37,7 @@ class Adapter(ABC):
 
     @classmethod
     @abstractmethod
-    def keep_data(cls, col: Collection, ass_id: int = 3) -> bool:
+    def set_data(cls, col: Collection, ass_id: int = 3) -> bool:
         """Save attributes WRITABLE and STATIC if possible. Use LDN as ID"""
 
     @classmethod
@@ -47,9 +47,9 @@ class Adapter(ABC):
 
     @classmethod
     @abstractmethod
-    def create_template(cls,
-                        name: str,
-                        template: Template):
+    def set_template(cls,
+                     name: str,
+                     template: Template):
         """keep used values to template by collections with <name>"""
 
     @classmethod
@@ -69,7 +69,7 @@ class AdapterException(Exception):
 
 class __Gag(Adapter):
     @classmethod
-    def create_type(cls, col: Collection):
+    def set_collection(cls, col: Collection):
         logger.warning(F"{cls.__name__} not support <get_template>")
 
     @classmethod
@@ -77,7 +77,7 @@ class __Gag(Adapter):
         raise AdapterException(F"{cls.__name__} not support <get_collection>")
 
     @classmethod
-    def keep_data(cls, col: Collection, ass_id: int = 3) -> bool:
+    def set_data(cls, col: Collection, ass_id: int = 3) -> bool:
         raise AdapterException(F"{cls.__name__} not support <keep_data>")
 
     @classmethod
@@ -85,7 +85,7 @@ class __Gag(Adapter):
         raise AdapterException(F"{cls.__name__} not support <get_data>")
 
     @classmethod
-    def create_template(cls, name: str, template: Template):
+    def set_template(cls, name: str, template: Template):
         raise AdapterException(F"{cls.__name__} not support <create_template>")
 
     @classmethod

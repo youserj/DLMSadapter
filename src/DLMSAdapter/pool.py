@@ -50,9 +50,9 @@ class Pool(Adapter):
     """"""
 
     @classmethod
-    def create_type(cls, col: Collection):
+    def set_collection(cls, col: Collection):
         for adp in _adapters[CREATE_TYPE]:
-            adp.create_type(col)
+            adp.set_collection(col)
 
     @classmethod
     def get_collection(cls, m: bytes, f_id: ParameterValue, ver: ParameterValue) -> Collection:
@@ -66,10 +66,10 @@ class Pool(Adapter):
             raise ret
 
     @classmethod
-    def keep_data(cls, col: Collection, ass_id: int = 3) -> bool:
+    def set_data(cls, col: Collection, ass_id: int = 3) -> bool:
         ret = False
         for adp in _adapters[KEEP_DATA]:
-            if tmp := adp.keep_data(col, ass_id):
+            if tmp := adp.set_data(col, ass_id):
                 ret = tmp
         return ret
 
@@ -86,7 +86,7 @@ class Pool(Adapter):
             raise ret
 
     @classmethod
-    def create_template(cls, name: str, template: Template):
+    def set_template(cls, name: str, template: Template):
         pass
 
     @classmethod

@@ -179,11 +179,11 @@ class Xml3(__GetCollectionMixin1, Base):
         return r_n
 
     @classmethod
-    def create_type(cls, col: Collection):
+    def set_collection(cls, col: Collection):
         raise AdapterException(F"not support <create_type> for {cls.VERSION}")
 
     @classmethod
-    def keep_data(cls, col: Collection, ass_id: int = 3) -> bool:
+    def set_data(cls, col: Collection, ass_id: int = 3) -> bool:
         raise AdapterException(F"not support <keep_data> for {cls.VERSION}")
 
     @classmethod
@@ -382,9 +382,9 @@ class Xml3(__GetCollectionMixin1, Base):
                 raise AdapterException(F"no support version {ver} with manufacturer: {m}, identifier: {f_id}")
 
     @classmethod
-    def create_template(cls,
-                        name: str,
-                        template: Template):
+    def set_template(cls,
+                     name: str,
+                     template: Template):
         raise AdapterException(F"not support <create_template> for {cls.VERSION}")
 
     @classmethod
@@ -415,16 +415,16 @@ class Xml40(__GetCollectionMixin1, Base):
         return Xml3.get_col_path(m, f_id, ver)
 
     @classmethod
-    def create_type(cls, col: Collection):
-        Xml3.create_type(col)
+    def set_collection(cls, col: Collection):
+        Xml3.set_collection(col)
 
     @classmethod
-    def keep_data(cls, col: Collection, ass_id: int = 3) -> bool:
-        return Xml3.keep_data(col)
+    def set_data(cls, col: Collection, ass_id: int = 3) -> bool:
+        return Xml3.set_data(col)
 
     @classmethod
-    def create_template(cls, name: str, template: Template):
-        Xml3.create_template(name, template)
+    def set_template(cls, name: str, template: Template):
+        Xml3.set_template(name, template)
 
     @classmethod
     def get_template(cls, name: str) -> Template:
@@ -568,7 +568,7 @@ class Xml41(__GetCollectionMixin1, Base):
         return Xml3._get_root_node(col, tag)
 
     @classmethod
-    def create_type(cls, col: Collection):
+    def set_collection(cls, col: Collection):
         root_node = cls._get_root_node(col, cls.TYPE_ROOT_TAG)
         objs: dict[cst.LogicalName, set[int]] = dict()
         """key: LN, value: not writable and readable container"""
@@ -628,7 +628,7 @@ class Xml41(__GetCollectionMixin1, Base):
             cls.get_manufactures_container().cache_clear()
 
     @classmethod
-    def keep_data(cls, col: Collection, ass_id: int = 3) -> bool:
+    def set_data(cls, col: Collection, ass_id: int = 3) -> bool:
         path = cls._get_keep_path(col)
         root_node = cls._get_root_node(col, cls.DATA_ROOT_TAG)
         is_empty: bool = True
@@ -764,9 +764,9 @@ class Xml41(__GetCollectionMixin1, Base):
                 xml_declaration=True))
 
     @classmethod
-    def create_template(cls,
-                        name: str,
-                        template: Template):
+    def set_template(cls,
+                     name: str,
+                     template: Template):
         cls.temp2root(
             r_n=cls._get_template_root_node(collections=template.collections),
             path=cls._get_template_path(name),
@@ -867,7 +867,7 @@ class Xml50(__GetCollectionMixin1, Base):
         return col
 
     @classmethod
-    def keep_data(cls, col: Collection, ass_id: int = 3) -> bool:
+    def set_data(cls, col: Collection, ass_id: int = 3) -> bool:
         path = cls._get_keep_path(col)
         root_node = cls._get_root_node(col, cls.DATA_ROOT_TAG)
         is_empty: bool = True
@@ -945,9 +945,9 @@ class Xml50(__GetCollectionMixin1, Base):
         return path
 
     @classmethod
-    def create_template(cls,
-                        name: str,
-                        template: Template):
+    def set_template(cls,
+                     name: str,
+                     template: Template):
         Xml41.temp2root(
             r_n=cls._get_template_root_node(collections=template.collections),
             path=cls._get_template_path(name),
@@ -1118,7 +1118,7 @@ class Xml50(__GetCollectionMixin1, Base):
         return r_n
 
     @classmethod
-    def create_type(cls, col: Collection):
+    def set_collection(cls, col: Collection):
         if not isinstance(col.manufacturer, bytes):
             raise AdapterException(F"{col} hasn't manufacturer parameter")
         if not isinstance(col.firm_id, ParameterValue):
