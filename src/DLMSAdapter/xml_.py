@@ -48,7 +48,7 @@ class Base(Adapter, ABC):
 
     @staticmethod
     def _get_template_path(name: str) -> Path:
-        return (TEMPLATE_PATH / name).with_suffix(".tmp")
+        return (TEMPLATE_PATH / name).with_suffix(".xml")
 
     @classmethod
     def _create_root_node(cls, tag: str) -> ET.Element:
@@ -839,6 +839,7 @@ class Xml41(__GetCollectionMixin1, __SetTemplateMixin1, Base):
                 except AttributeError as e:
                     logger.error(F'Object {new_object} attr:{index} do not fill: {e}')
         return Template(
+            name=name,
             collections=cols,
             used=used,
             verified=bool(int(r_n.findtext("verified", default="0"))))
@@ -938,10 +939,6 @@ class Xml50(__GetCollectionMixin1, __SetTemplateMixin1, Base):
         return r_n
 
     @staticmethod
-    def _get_template_path(name: str) -> Path:
-        return (TEMPLATE_PATH / name).with_suffix(".xml")
-
-    @staticmethod
     def node2parval(node: ET.Element) -> ParameterValue:
         return ParameterValue(
             par=bytes.fromhex(node.findtext("par")),
@@ -966,7 +963,7 @@ class Xml50(__GetCollectionMixin1, __SetTemplateMixin1, Base):
                             ver=cls.node2parval(fv_n),
                         ))
                     except AdapterException as e:
-                        logger.error(F"collection with: {man_n}/{fid_n}/{fv_n} not load to Template")
+                        logger.error(F"collection with: {man_n}/{fid_n}/{fv_n} not load to Template: {e}")
                         continue
         for obj in r_n.findall('object'):
             ln: str = obj.attrib.get("ln", 'is absence')
