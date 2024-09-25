@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import logging
 from DLMS_SPODES.cosem_interface_classes.collection import (
-    Collection,
+    Collection, ID,
     ParameterValue,
     Template)
 from semver import Version as SemVer
@@ -32,8 +32,8 @@ class Adapter(ABC):
         """get Collection by m: manufacturer, t: type, ver: version. AdapterException if not find collection by ID """
 
     @abstractmethod
-    def get_collections(self) -> dict[bytes, [dict[bytes, tuple[bytes]]]]:
-        """return container all manufacturer, with firm_ID, firm_ver"""
+    def get_collectionIDs(self) -> list[ID]:
+        """return container used CollectionID"""
 
     @classmethod
     @abstractmethod
@@ -92,7 +92,7 @@ class __Gag(Adapter):
     def get_templates(cls) -> list[str]:
         raise AdapterException(F"{cls.__name__} not have <templates>")
 
-    def get_collections(self) -> dict[bytes, [dict[bytes, tuple[bytes]]]]:
+    def get_collectionIDs(self) -> list[ID]:
         raise AdapterException(F"{self.__name__} not have <manufacturers>")
 
 

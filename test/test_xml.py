@@ -26,15 +26,22 @@ serID_M2M_3 = collection.ParameterValue(
 
 
 colXXX = collection.Collection(
-    man=b'XXX',
-    f_id=collection.ParameterValue(b'1234567', cdt.OctetString(bytearray(b'M2M-1')).encoding),
-    f_ver=collection.ParameterValue(b'1234560', cdt.OctetString(bytearray(b'1.4.2')).encoding)
+    id_=collection.ID(
+        man=b'XXX',
+        f_id=collection.ParameterValue(b'1234567', cdt.OctetString(bytearray(b'M2M-1')).encoding),
+        f_ver=collection.ParameterValue(b'1234560', cdt.OctetString(bytearray(b'1.4.2')).encoding)
+    )
 )
 clock_obj = colXXX.add(
     overview.ClassID.CLOCK,
     overview.Version.V0,
     cst.LogicalName.from_obis("0.0.1.0.0.255"))
 clock_obj.set_attr(3, 120)
+ass_obj = colXXX.add(
+    overview.ClassID.ASSOCIATION_LN,
+    overview.Version.V1,
+    cst.LogicalName.from_obis("0.0.40.0.3.255"))
+ass_obj.set_attr(2, [])
 
 logger = logging.getLogger(__name__)
 logger.level = logging.INFO
@@ -42,18 +49,18 @@ logger.level = logging.INFO
 
 class TestType(unittest.TestCase):
     def test_create_adapter(self):
-        adapter_ = xml50()
+        adapter_ = xml50
 
     def test_create_type(self):
         print(colXXX)
         xml50.set_collection(colXXX)
-        col = xml50.get_collection(colXXX.manufacturer, colXXX.firm_id, colXXX.firm_ver)
+        col = xml50.get_collection(colXXX.id.man, colXXX.id.f_id, colXXX.id.f_ver)
         print(col)
 
     def test_get_man(self):
         c = Xml3.get_manufactures_container()
         print(c)
-        mans = xml50.get_collections()
+        mans = xml50.get_collectionIDs()
         print(mans)
 
     def test_get_obj_list(self):
@@ -76,7 +83,7 @@ class TestType(unittest.TestCase):
                 pass
             else:
                 ass.object_list.remove(el)
-        col.set_firm_id(value=collection.ParameterValue(b'', cdt.OctetString("00").encoding), force=True)
+        # col.set_firm_id(value=collection.ParameterValue(b'', cdt.OctetString("00").encoding), force=True)
         xml50.set_collection(col)
         print(ass.object_list.encoding.hex())
 

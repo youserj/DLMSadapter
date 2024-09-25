@@ -8,7 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 import logging
 from semver import Version as SemVer
-from DLMS_SPODES.cosem_interface_classes.collection import Collection, ParameterValue, cst, ClassID, ic, ut, cdt, AssociationLN, Template
+from DLMS_SPODES.cosem_interface_classes.collection import Collection, ParameterValue, cst, ClassID, ic, ut, cdt, AssociationLN, Template, ID
 from DLMS_SPODES.cosem_interface_classes.association_ln.ver0 import ObjectListElement, AttributeAccessItem, AccessMode, is_attr_writable
 from DLMS_SPODES.cosem_interface_classes import implementations as impl, collection
 from DLMS_SPODES import exceptions as exc
@@ -126,9 +126,12 @@ class Base(Adapter, ABC):
         tree = ET.parse(path)
         new = cls.root2collection(
             r_n=tree.getroot(),
-            col=Collection(
+            col=Collection(id_=collection.ID(
                 man=m,
-                f_id=f_id))
+                f_id=f_id,
+                f_ver=ver
+            ))
+        )
         return new
 
     @classmethod
@@ -146,14 +149,18 @@ class Base(Adapter, ABC):
         raise AdapterException(F"{cls.__name__} not have <templates>")
 
 
-class __GetCollectionMixin1(Base, ABC):
+class __GetCollectionIDMixin1(Base, ABC):
     """"""
-    def get_collections(self) -> dict[bytes, [dict[bytes, tuple[bytes]]]]:
-        ret: dict[bytes, [dict[bytes, tuple[bytes]]]] = dict()
+    def get_collectionIDs(self) -> list[ID]:
+        ret = list()
         for m_k, m_v in self.get_manufactures_container().items():
-            ret[m_k] = dict()
             for f_id_k, f_id_v in m_v.items():
-                ret[m_k][f_id_k] = tuple(f_id_v.keys())
+                for f_ver in f_id_v.keys():
+                    ret.append(collection.ID(
+                        man=m_k,
+                        f_id=ParameterValue.parse(f_id_k),
+                        f_ver=ParameterValue.parse(f_ver)
+                    ))
         return ret
 
 
@@ -237,7 +244,7 @@ class __SetTemplateMixin1(Base, ABC):
             template=template)
 
 
-class Xml3(__GetCollectionMixin1, Base):
+class Xml3(__GetCollectionIDMixin1, Base):
     VERSION: SemVer = SemVer(3, 2)
     TYPE_ROOT_TAG: str = "Objects"
     DATA_ROOT_TAG: str = "Objects"
@@ -250,12 +257,10 @@ class Xml3(__GetCollectionMixin1, Base):
         ET.SubElement(r_n, "country").text = str(col.country.value)
         if col.country_ver:
             ET.SubElement(r_n, "country_ver").text = str(SemVer.parse(col.country_ver.value.contents, optional_minor_and_patch=True))
-        if col.manufacturer is not None:
-            ET.SubElement(r_n, "manufacturer").text = col.manufacturer.decode("utf-8")
-        if col.firm_id is not None:
-            ET.SubElement(r_n, "server_type").text = col.firm_id.value.hex()
-        if col.firm_ver is not None:
-            ET.SubElement(r_n, "server_ver", attrib={"instance": "1"}).text = str(SemVer.parse(col.firm_ver.value[2:]))
+        if col.id is not None:
+            ET.SubElement(r_n, "manufacturer").text = col.id.man.decode("utf-8")
+            ET.SubElement(r_n, "server_type").text = col.id.f_id.value.hex()
+            ET.SubElement(r_n, "server_ver", attrib={"instance": "1"}).text = str(SemVer.parse(col.id.f_ver.value[2:]))
         return r_n
 
     @classmethod
@@ -287,17 +292,19 @@ class Xml3(__GetCollectionMixin1, Base):
                 par=b'\x00\x00\x60\x01\x06\xff\x02',  # 0.0.96.1.6.255:2
                 value=cdt.OctetString(bytearray(country_ver.encode(encoding="ascii"))).encoding
             ))
-        if (manufacturer := r_n.findtext("manufacturer")) is not None:
-            col.set_manufacturer(manufacturer.encode("utf-8"))
-        if (firm_id := r_n.findtext("server_type")) is not None:
-            col.set_firm_id(ParameterValue(
-                par=b'\x00\x00\x60\x01\x01\xff\x02',  # 0.0.96.1.1.255:2
-                value=bytes.fromhex(firm_id)
-            ))
-        if (firm_ver := r_n.findtext("server_ver")) is not None:
-            col.set_firm_ver(ParameterValue(
-                par=b'\x00\x00\x00\x02\x01\xff\x02',
-                value=firm_ver.encode(encoding="ascii")
+        if all((
+                manufacturer := r_n.findtext("manufacturer"),
+                firm_id := r_n.findtext("server_type"),
+                firm_ver := r_n.findtext("server_ver")
+        )):
+            col.set_id(collection.ID(
+                man=manufacturer.encode("utf-8"),
+                f_id=ParameterValue(
+                    par=b'\x00\x00\x60\x01\x01\xff\x02',
+                    value=bytes.fromhex(firm_id)),
+                f_ver=ParameterValue(
+                    par=b'\x00\x00\x00\x02\x01\xff\x02',
+                    value=firm_ver.encode(encoding="ascii"))
             ))
         col.spec_map = col.get_spec()
 
@@ -469,7 +476,7 @@ class Xml3(__GetCollectionMixin1, Base):
         raise AdapterException(F"not support <get_template> for {cls.VERSION}")
 
 
-class Xml40(__GetCollectionMixin1, Base):
+class Xml40(__GetCollectionIDMixin1, Base):
     VERSION: SemVer = SemVer(4, 0)
     TYPE_ROOT_TAG = Xml3.TYPE_ROOT_TAG
     DATA_ROOT_TAG = Xml3.DATA_ROOT_TAG
@@ -620,7 +627,7 @@ class Xml40(__GetCollectionMixin1, Base):
         return col
 
 
-class Xml41(__GetCollectionMixin1, __SetTemplateMixin1, Base):
+class Xml41(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
     VERSION: SemVer = SemVer(4, 1)
     TYPE_ROOT_TAG = Xml3.TYPE_ROOT_TAG
     DATA_ROOT_TAG = Xml3.DATA_ROOT_TAG
@@ -694,11 +701,11 @@ class Xml41(__GetCollectionMixin1, __SetTemplateMixin1, Base):
                 root_node.remove(object_node)
         # TODO: '<!DOCTYPE ITE_util_tree SYSTEM "setting.dtd"> or xsd
         xml_string = ET.tostring(root_node, encoding='cp1251', method='xml')
-        if not (man_path := types_path / col.manufacturer.decode("ascii")).exists():
+        if not (man_path := types_path / col.id.man.decode("ascii")).exists():
             man_path.mkdir()
-        if not (type_path := man_path / col.firm_id.value.hex()).exists():
+        if not (type_path := man_path / col.id.f_id.value.hex()).exists():
             type_path.mkdir()
-        ver_path = type_path / F"{SemVer.parse(col.firm_ver.value)}.typ"  # use
+        ver_path = type_path / F"{SemVer.parse(col.id.f_ver.value)}.typ"  # use
         with open(ver_path, "wb") as f:
             f.write(xml_string)
             cls.get_manufactures_container().cache_clear()
@@ -709,9 +716,9 @@ class Xml41(__GetCollectionMixin1, __SetTemplateMixin1, Base):
         root_node = cls._get_root_node(col, cls.DATA_ROOT_TAG)
         is_empty: bool = True
         parent_col = cls._get_collection(
-            m=col.manufacturer,
-            f_id=col.firm_id,
-            ver=col.firm_ver)
+            m=col.id.man,
+            f_id=col.id.f_id,
+            ver=col.id.f_ver)
         obj_list_el: ObjectListElement
         a_a: AttributeAccessItem
         for obj_list_el in col.getASSOCIATION(ass_id).object_list:
@@ -765,11 +772,11 @@ class Xml41(__GetCollectionMixin1, __SetTemplateMixin1, Base):
         ET.SubElement(r_n, "country_ver").text = str(SemVer.parse(collections[0].country_ver.value.contents, optional_minor_and_patch=True))
         for col in collections:
             manufacture_node = ET.SubElement(r_n, "manufacturer")
-            manufacture_node.text = col.manufacturer.decode("utf-8")
+            manufacture_node.text = col.id.man.decode("utf-8")
             server_type_node = ET.SubElement(manufacture_node, "server_type")
-            server_type_node.text = col.firm_id.value.hex()
+            server_type_node.text = col.id.f_id.value.hex()
             firm_ver_node = ET.SubElement(server_type_node, "server_ver", attrib={"instance": "1"})
-            firm_ver_node.text = str(SemVer.parse(col.firm_ver.value))
+            firm_ver_node.text = str(SemVer.parse(col.id.f_ver.value))
         return r_n
 
     @classmethod
@@ -845,7 +852,7 @@ class Xml41(__GetCollectionMixin1, __SetTemplateMixin1, Base):
             verified=bool(int(r_n.findtext("verified", default="0"))))
 
 
-class Xml50(__GetCollectionMixin1, __SetTemplateMixin1, Base):
+class Xml50(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
     """"""
     VERSION = SemVer(5, 0)
     TYPE_ROOT_TAG = "DLMSServerType"
@@ -873,9 +880,9 @@ class Xml50(__GetCollectionMixin1, __SetTemplateMixin1, Base):
         root_node = cls._get_root_node(col, cls.DATA_ROOT_TAG)
         is_empty: bool = True
         parent_col = cls._get_collection(
-            m=col.manufacturer,
-            f_id=col.firm_id,
-            ver=col.firm_ver)
+            m=col.id.man,
+            f_id=col.id.f_id,
+            ver=col.id.f_ver)
         obj_list_el: ObjectListElement
         a_a: AttributeAccessItem
         for obj_list_el in col.getASSOCIATION(ass_id).object_list:
@@ -933,9 +940,9 @@ class Xml50(__GetCollectionMixin1, __SetTemplateMixin1, Base):
                                 collections: list[Collection]) -> ET.Element:
         r_n = cls._create_root_node(cls.TEMPLATE_ROOT_TAG)
         for col in collections:
-            man_n = cls.get_template_node(r_n, "manufacturer", str(col.manufacturer.hex()))
-            firm_id_n = cls.get_template_node_param(man_n, "firm_id", col.firm_id)
-            cls.get_template_node_param(firm_id_n, "firm_ver", col.firm_ver)
+            man_n = cls.get_template_node(r_n, "manufacturer", str(col.id.man.hex()))
+            firm_id_n = cls.get_template_node_param(man_n, "firm_id", col.id.fid)
+            cls.get_template_node_param(firm_id_n, "firm_ver", col.id.f_ver)
         return r_n
 
     @staticmethod
@@ -1022,12 +1029,16 @@ class Xml50(__GetCollectionMixin1, __SetTemplateMixin1, Base):
             col.set_country(collection.CountrySpecificIdentifiers(int(country)))
         if (country_ver_el := r_n.find("country_ver")) is not None:
             col.set_country_ver(cls.node2parval(country_ver_el))
-        if (manufacturer := r_n.findtext("manufacturer")) is not None:
-            col.set_manufacturer(bytes.fromhex(manufacturer))
-        if (firm_id_el := r_n.find("firm_id")) is not None:
-            col.set_firm_id(cls.node2parval(firm_id_el))
-        if (firm_ver_el := r_n.find("firm_ver")) is not None:
-            col.set_firm_ver(cls.node2parval(firm_ver_el))
+        if all((
+            manufacturer := r_n.findtext("manufacturer"),
+            firm_id_el := r_n.find("firm_id"),
+            firm_ver_el := r_n.find("firm_ver")
+        )):
+            col.set_id(collection.ID(
+                man=bytes.fromhex(manufacturer),
+                f_id=cls.node2parval(firm_id_el),
+                f_ver=cls.node2parval(firm_ver_el)
+            ))
         col.spec_map = col.get_spec()
 
     @classmethod
@@ -1036,9 +1047,9 @@ class Xml50(__GetCollectionMixin1, __SetTemplateMixin1, Base):
         """ret: file, is_searched"""
         if (man := cls.get_manufactures_container().get(m)) is None:
             raise AdapterException(F"no support manufacturer: {m}")
-        elif (firm_id := man.get(f_id.value)) is None:
+        elif (firm_id := man.get(bytes(f_id))) is None:
             raise AdapterException(F"no support type {f_id}, with manufacturer: {m}")
-        elif (path := firm_id.get(ver.value)) is not None:
+        elif (path := firm_id.get(bytes(ver))) is not None:
             logger.info(F"got collection from library by {path=}")
             return path
         elif SemVer.is_valid((ver_ := cdt.get_instance_and_pdu_from_value(ver.value)[0].contents).decode("utf-8", "ignore")):
@@ -1095,30 +1106,28 @@ class Xml50(__GetCollectionMixin1, __SetTemplateMixin1, Base):
             ET.SubElement(r_n, "country").text = str(col.country.value)
             if col.country_ver:
                 cls.parval2node(r_n, "country_ver", col.country_ver)
-        if col.manufacturer is not None:
-            ET.SubElement(r_n, "manufacturer").text = col.manufacturer.hex()
-            if col.firm_id is not None:
-                cls.parval2node(r_n, "firm_id", col.firm_id)
-                if col.firm_ver is not None:
-                    cls.parval2node(r_n, "firm_ver", col.firm_ver)
+        if col.id is not None:
+            ET.SubElement(r_n, "manufacturer").text = col.id.man.hex()
+            cls.parval2node(r_n, "firm_id", col.id.f_id)
+            cls.parval2node(r_n, "firm_ver", col.id.f_ver)
         return r_n
 
     @classmethod
     def set_collection(cls, col: Collection):
-        if not isinstance(col.manufacturer, bytes):
-            raise AdapterException(F"{col} hasn't manufacturer parameter")
-        if not isinstance(col.firm_id, ParameterValue):
-            raise AdapterException(F"{col} hasn't <Firmware ID> parameter")
-        if not isinstance(col.firm_ver, ParameterValue):
-            raise AdapterException(F"{col} hasn't <Firmware Version> parameter")
+        if not isinstance(col.id, collection.ID):
+            raise AdapterException(F"{col} hasn't ID")
         root_node = cls._get_root_node(col, Xml50.TYPE_ROOT_TAG)
         objs: dict[cst.LogicalName, set[int]] = dict()
         """key: LN, value: not writable and readable container"""
         reduce_ln = collection.ln_pattern.LNPattern("0.0.(40,42).0.0.255")
+        ass: AssociationLN
+        access: AttributeAccessItem
         for ass in filter(lambda it: it.logical_name.e != 0, col.get_objects_by_class_id(ClassID.ASSOCIATION_LN)):
             if ass.object_list is None:
                 logger.warning(F"for {ass} got empty <object_list>. skip it")
                 continue
+            else:
+                objs[ass.logical_name] = {2}  # always keep <object_list>
             for obj_el in ass.object_list:
                 if reduce_ln == obj_el.logical_name:
                     """skip LDN and current_association"""
@@ -1127,12 +1136,14 @@ class Xml50(__GetCollectionMixin1, __SetTemplateMixin1, Base):
                     """"""
                 else:
                     objs[obj_el.logical_name] = set()
-                for access in obj_el.access_rights.attribute_access[1:]:  # without ln
-                    if (
+                for access in obj_el.access_rights.attribute_access:
+                    if (i := int(access.attribute_id)) == 1:
+                        continue
+                    elif (
                         access.access_mode.is_readable()
                         and not access.access_mode.is_writable()
                     ):
-                        objs[obj_el.logical_name].add(int(access.attribute_id))
+                        objs[obj_el.logical_name].add(i)
         o2 = list()
         """container sort by AssociationLN first"""
         for ln in objs.keys():
@@ -1164,11 +1175,11 @@ class Xml50(__GetCollectionMixin1, __SetTemplateMixin1, Base):
                 root_node.remove(object_node)
         # TODO: '<!DOCTYPE ITE_util_tree SYSTEM "setting.dtd"> or xsd
         xml_string = ET.tostring(root_node, encoding="utf-8", method='xml')
-        if not (man_path := types_path / col.manufacturer.hex()).exists():
+        if not (man_path := types_path / col.id.man.hex()).exists():
             man_path.mkdir()
-        if not (type_path := man_path / col.firm_id.value.hex()).exists():
+        if not (type_path := man_path / bytes(col.id.f_id).hex()).exists():
             type_path.mkdir()
-        ver_path = type_path / F"{col.firm_ver.value.hex()}.xml"
+        ver_path = type_path / F"{bytes(col.id.f_ver).hex()}.xml"
         with open(ver_path, "wb") as f:
             f.write(xml_string)
             cls.get_manufactures_container.cache_clear()
