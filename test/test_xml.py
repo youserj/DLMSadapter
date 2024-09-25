@@ -112,14 +112,15 @@ class TestType(unittest.TestCase):
         print(col2)
 
     def test_get_collection50(self):
-        col = xml50.get_collection(
-            m=b"KPZ",
-            f_id=collection.ParameterValue(
-                par=bytes.fromhex("0000000200ff02"),
-                value=bytes.fromhex("090e5057524d5f4d324d5f315f46345f")),
-            ver=collection.ParameterValue(
-                par=bytes.fromhex("0000000201ff02"),
-                value=cdt.OctetString(bytearray(b"1.7.3")).encoding))
+        col = xml50.get_collection(collection.ID(
+                man=b"KPZ",
+                f_id=collection.ParameterValue(
+                    par=bytes.fromhex("0000000200ff02"),
+                    value=bytes.fromhex("090e5057524d5f4d324d5f315f46345f")),
+                f_ver=collection.ParameterValue(
+                    par=bytes.fromhex("0000000201ff02"),
+                    value=cdt.OctetString(bytearray(b"1.7.3")).encoding)
+        ))
         # col2 = xml50.get_collection(
         #     m=b"KPZ",
         #     f_id=collection.ParameterValue(

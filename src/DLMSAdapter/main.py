@@ -25,10 +25,7 @@ class Adapter(ABC):
 
     @classmethod
     @abstractmethod
-    def get_collection(cls,
-                       m: bytes,
-                       f_id: ParameterValue,
-                       ver: ParameterValue) -> Collection:
+    def get_collection(cls, col_id: ID) -> Collection:
         """get Collection by m: manufacturer, t: type, ver: version. AdapterException if not find collection by ID """
 
     @abstractmethod
@@ -70,7 +67,7 @@ class __Gag(Adapter):
         logger.warning(F"{cls.__name__} not support <get_template>")
 
     @classmethod
-    def get_collection(cls, m: bytes, f_id: ParameterValue, ver: ParameterValue) -> Collection:
+    def get_collection(cls, col_id: ID) -> Collection:
         raise AdapterException(F"{cls.__name__} not support <get_collection>")
 
     @classmethod

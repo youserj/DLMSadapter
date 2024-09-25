@@ -112,37 +112,23 @@ class Base(Adapter, ABC):
     @classmethod
     @abstractmethod
     @lru_cache(maxsize=100)
-    def get_col_path(cls, m: bytes, f_id: ParameterValue, ver: ParameterValue) -> Path:
+    def get_col_path(cls,  col_id: ID) -> Path:
         """return Path by parameters"""
 
     @classmethod
     @lru_cache(maxsize=100)
-    def _get_collection(cls,
-                        m: bytes,
-                        f_id: ParameterValue,
-                        ver: ParameterValue) -> Collection:
-        path = cls.get_col_path(m, f_id, ver)
+    def _get_collection(cls, col_id: ID) -> Collection:
+        path = cls.get_col_path(col_id)
         logger.info(F"find type {path=}")
         tree = ET.parse(path)
-        new = cls.root2collection(
+        return cls.root2collection(
             r_n=tree.getroot(),
-            col=Collection(id_=collection.ID(
-                man=m,
-                f_id=f_id,
-                f_ver=ver
-            ))
-        )
-        return new
+            col=Collection(id_=col_id))
 
     @classmethod
-    def get_collection(cls,
-                       m: bytes,
-                       f_id: ParameterValue,
-                       ver: ParameterValue) -> Collection:
+    def get_collection(cls, col_id: ID) -> Collection:
         """return copy of parent Collection"""
-        new = cls._get_collection(m, f_id, ver).copy()
-        new.set_firm_ver(ver)
-        return new
+        return cls._get_collection(col_id).copy()
 
     @classmethod
     def get_templates(cls) -> list[str]:
@@ -452,13 +438,13 @@ class Xml3(__GetCollectionIDMixin1, Base):
 
     @classmethod
     @lru_cache(maxsize=100)
-    def get_col_path(cls, m: bytes, f_id: ParameterValue, ver: ParameterValue) -> Path:
+    def get_col_path(cls,  col_id: ID) -> Path:
         """ret: file, is_searched"""
-        if (man := cls.get_manufactures_container().get(m)) is None:
-            raise AdapterException(F"no support manufacturer: {m}")
-        elif (firm_id := man.get(f_id.value)) is None:
-            raise AdapterException(F"no support type {f_id}, with manufacturer: {m}")
-        elif path := firm_id.get(semver := SemVer.parse(ver.value[2:], True)):
+        if (man := cls.get_manufactures_container().get(col_id.man)) is None:
+            raise AdapterException(F"no support manufacturer: {col_id.man}")
+        elif (firm_id := man.get(col_id.f_id.value)) is None:
+            raise AdapterException(F"no support type {col_id.f_id}, with manufacturer: {m}")
+        elif path := firm_id.get(semver := SemVer.parse(col_id.f_ver.value[2:], True)):
             logger.info(F"got collection from library by {path=}")
             return path
         else:
@@ -466,7 +452,7 @@ class Xml3(__GetCollectionIDMixin1, Base):
                 # todo: remove all compatible without MAX version
                 return firm_id.get(max(filter(lambda v: v.is_compatible(semver), firm_id.keys())))
             except ValueError:
-                raise AdapterException(F"no support version {ver} with manufacturer: {m}, identifier: {f_id}")
+                raise AdapterException(F"no support version {col_id.f_ver} with manufacturer: {col_id.man}, identifier: {col_id.f_id}")
 
     def set_template(self, template: Template):
         raise AdapterException(F"not support <create_template> for {self.VERSION}")
@@ -495,8 +481,8 @@ class Xml40(__GetCollectionIDMixin1, Base):
         return Xml3.get_manufactures_container()
 
     @classmethod
-    def get_col_path(cls, m: bytes, f_id: ParameterValue, ver: ParameterValue) -> Path:
-        return Xml3.get_col_path(m, f_id, ver)
+    def get_col_path(cls,  col_id: ID) -> Path:
+        return Xml3.get_col_path(col_id)
 
     @classmethod
     def set_collection(cls, col: Collection):
@@ -643,8 +629,8 @@ class Xml41(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
         return Xml3.get_manufactures_container()
 
     @classmethod
-    def get_col_path(cls, m: bytes, f_id: ParameterValue, ver: ParameterValue) -> Path:
-        return Xml3.get_col_path(m, f_id, ver)
+    def get_col_path(cls,  col_id: ID) -> Path:
+        return Xml3.get_col_path(col_id)
 
     @classmethod
     def _get_root_node(cls, col: Collection, tag: str) -> ET.Element:
@@ -715,10 +701,7 @@ class Xml41(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
         path = cls._get_keep_path(col)
         root_node = cls._get_root_node(col, cls.DATA_ROOT_TAG)
         is_empty: bool = True
-        parent_col = cls._get_collection(
-            m=col.id.man,
-            f_id=col.id.f_id,
-            ver=col.id.f_ver)
+        parent_col = cls._get_collection(col.id)
         obj_list_el: ObjectListElement
         a_a: AttributeAccessItem
         for obj_list_el in col.getASSOCIATION(ass_id).object_list:
@@ -792,17 +775,15 @@ class Xml41(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
         for manufacturer_node in r_n.findall("manufacturer"):
             for server_type_node in manufacturer_node.findall("server_type"):
                 for firm_ver_node in server_type_node.findall("server_ver"):
-                    cols.append(cls.get_collection(
-                        m=manufacturer_node.text.encode("utf-8"),
+                    cols.append(cls.get_collection(collection.ID(
+                        man=manufacturer_node.text.encode("utf-8"),
                         f_id=ParameterValue(
                             par=b'\x00\x00\x60\x01\x01\xff\x02',
-                            value=bytes.fromhex(server_type_node.text)
-                        ),
-                        ver=ParameterValue(
+                            value=bytes.fromhex(server_type_node.text)),
+                        f_ver=ParameterValue(
                             par=b'\x00\x00\x00\x02\x00\xff\x02',
-                            value=cdt.OctetString(bytearray(firm_ver_node.text.encode(encoding="ascii"))).encoding
-                        )
-                    ))
+                            value=cdt.OctetString(bytearray(firm_ver_node.text.encode(encoding="ascii"))).encoding)
+                    )))
         for obj in r_n.findall('object'):
             ln: str = obj.attrib.get("ln", 'is absence')
             obis = cst.LogicalName.from_obis(ln)
@@ -879,10 +860,7 @@ class Xml50(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
         path = cls._get_keep_path(col)
         root_node = cls._get_root_node(col, cls.DATA_ROOT_TAG)
         is_empty: bool = True
-        parent_col = cls._get_collection(
-            m=col.id.man,
-            f_id=col.id.f_id,
-            ver=col.id.f_ver)
+        parent_col = cls._get_collection(col.id)
         obj_list_el: ObjectListElement
         a_a: AttributeAccessItem
         for obj_list_el in col.getASSOCIATION(ass_id).object_list:
@@ -941,7 +919,7 @@ class Xml50(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
         r_n = cls._create_root_node(cls.TEMPLATE_ROOT_TAG)
         for col in collections:
             man_n = cls.get_template_node(r_n, "manufacturer", str(col.id.man.hex()))
-            firm_id_n = cls.get_template_node_param(man_n, "firm_id", col.id.fid)
+            firm_id_n = cls.get_template_node_param(man_n, "firm_id", col.id.f_id)
             cls.get_template_node_param(firm_id_n, "firm_ver", col.id.f_ver)
         return r_n
 
@@ -964,11 +942,11 @@ class Xml50(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
             for fid_n in man_n.findall("firm_id"):
                 for fv_n in fid_n.findall("firm_ver"):
                     try:
-                        cols.append(cls.get_collection(
-                            m=bytes.fromhex(man_n.findtext("value")),
+                        cols.append(cls.get_collection(collection.ID(
+                            man=bytes.fromhex(man_n.findtext("value")),
                             f_id=cls.node2parval(fid_n),
-                            ver=cls.node2parval(fv_n),
-                        ))
+                            f_ver=cls.node2parval(fv_n),
+                        )))
                     except AdapterException as e:
                         logger.error(F"collection with: {man_n}/{fid_n}/{fv_n} not load to Template: {e}")
                         continue
@@ -1043,16 +1021,16 @@ class Xml50(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
 
     @classmethod
     @lru_cache(maxsize=100)
-    def get_col_path(cls, m: bytes, f_id: ParameterValue, ver: ParameterValue) -> Path:
+    def get_col_path(cls,  col_id: ID) -> Path:
         """ret: file, is_searched"""
-        if (man := cls.get_manufactures_container().get(m)) is None:
-            raise AdapterException(F"no support manufacturer: {m}")
-        elif (firm_id := man.get(bytes(f_id))) is None:
-            raise AdapterException(F"no support type {f_id}, with manufacturer: {m}")
-        elif (path := firm_id.get(bytes(ver))) is not None:
+        if (man := cls.get_manufactures_container().get(col_id.man)) is None:
+            raise AdapterException(F"no support manufacturer: {col_id.man}")
+        elif (firm_id := man.get(bytes(col_id.f_id))) is None:
+            raise AdapterException(F"no support type {col_id.f_id}, with manufacturer: {m}")
+        elif (path := firm_id.get(bytes(col_id.f_ver))) is not None:
             logger.info(F"got collection from library by {path=}")
             return path
-        elif SemVer.is_valid((ver_ := cdt.get_instance_and_pdu_from_value(ver.value)[0].contents).decode("utf-8", "ignore")):
+        elif SemVer.is_valid((ver_ := cdt.get_instance_and_pdu_from_value(col_id.f_ver.value)[0].contents).decode("utf-8", "ignore")):
             logger.warning(F"try find compatible version...")
             semver = SemVer.parse(ver_)
             for v in firm_id.keys():
@@ -1064,9 +1042,9 @@ class Xml50(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
                 ):
                     return firm_id[v]
             else:
-                raise AdapterException(F"was no find compatible version {ver} with manufacturer: {m}, identifier: {f_id}")
+                raise AdapterException(F"was no find compatible version {col_id}")
         else:
-            raise AdapterException(F"no support version {ver} with manufacturer: {m}, identifier: {f_id}")
+            raise AdapterException(F"no support version {col_id.f_ver} with manufacturer: {col_id.man}, identifier: {col_id.f_id}")
             # raise Xml3.get_col_path(m, f_id, ver)
 
     @staticmethod
