@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 type_title: str = "DLMSServerType"
 data_title: str = "DLMSServerData"
 template_title: str = "DLMSServerTemplate"
+type Manufacturer = bytes
 
 
 class Adapter(ABC):
@@ -31,6 +32,10 @@ class Adapter(ABC):
     @abstractmethod
     def get_collectionIDs(self) -> list[ID]:
         """return container used CollectionID"""
+
+    @abstractmethod
+    def get_ID_tree(self) -> dict[Manufacturer, dict[ParameterValue, set[ID]]]:
+        """return tree used CollectionID"""
 
     @classmethod
     @abstractmethod
@@ -90,6 +95,9 @@ class __Gag(Adapter):
         raise AdapterException(F"{cls.__name__} not have <templates>")
 
     def get_collectionIDs(self) -> list[ID]:
+        raise AdapterException(F"{self.__name__} not have <manufacturers>")
+
+    def get_ID_tree(self) -> dict[Manufacturer, dict[ParameterValue, set[ID]]]:
         raise AdapterException(F"{self.__name__} not have <manufacturers>")
 
 

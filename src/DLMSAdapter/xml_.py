@@ -149,6 +149,20 @@ class __GetCollectionIDMixin1(Base, ABC):
                     ))
         return ret
 
+    def get_ID_tree(self) -> dict[Manufacturer, dict[ParameterValue, set[ID]]]:
+        ret = dict()
+        for m_k, m_v in self.get_manufactures_container().items():
+            ret[m_k] = dict()
+            for f_id_k, f_id_v in m_v.items():
+                ret[m_k][id_ := ParameterValue.parse(f_id_k)] = set()
+                for f_ver in f_id_v.keys():
+                    ret[m_k][id_].add(collection.ID(
+                        man=m_k,
+                        f_id=ParameterValue.parse(f_id_k),
+                        f_ver=ParameterValue.parse(f_ver)
+                    ))
+        return ret
+
 
 class __SetTemplateMixin1(Base, ABC):
     @staticmethod
@@ -1026,7 +1040,7 @@ class Xml50(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
         if (man := cls.get_manufactures_container().get(col_id.man)) is None:
             raise AdapterException(F"no support manufacturer: {col_id.man}")
         elif (firm_id := man.get(bytes(col_id.f_id))) is None:
-            raise AdapterException(F"no support type {col_id.f_id}, with manufacturer: {m}")
+            raise AdapterException(F"no support type {col_id.f_id}, with manufacturer: {col_id.man}")
         elif (path := firm_id.get(bytes(col_id.f_ver))) is not None:
             logger.info(F"got collection from library by {path=}")
             return path
@@ -1034,8 +1048,11 @@ class Xml50(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
             logger.warning(F"try find compatible version...")
             semver = SemVer.parse(ver_)
             for v in firm_id.keys():
-                data, _ = cdt.get_instance_and_pdu_from_value(v)
-                d = data.decode()
+                try:
+                    data, _ = cdt.get_instance_and_pdu_from_value(ParameterValue.parse(v).value)
+                    d = data.decode()
+                except exc.ITEApplication as e:  # wrong parsing
+                    continue
                 if (
                     SemVer.is_valid(d.decode("utf-8", "ignore")) and
                     SemVer.parse(d, True) == semver

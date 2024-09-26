@@ -62,6 +62,8 @@ class TestType(unittest.TestCase):
         print(c)
         mans = xml50.get_collectionIDs()
         print(mans)
+        tree = xml50.get_ID_tree()
+        print(tree)
 
     def test_get_obj_list(self):
         # todo: don't work now
