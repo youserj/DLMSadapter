@@ -785,19 +785,22 @@ class Xml41(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
         r_n = tree.getroot()
         if not cls._is_header(r_n, Xml41.TEMPLATE_ROOT_TAG, Xml41.VERSION):
             raise AdapterException(F"Unknown tag: {r_n.tag} with {r_n.attrib}")
-
-        for manufacturer_node in r_n.findall("manufacturer"):
-            for server_type_node in manufacturer_node.findall("server_type"):
-                for firm_ver_node in server_type_node.findall("server_ver"):
-                    cols.append(cls.get_collection(collection.ID(
-                        man=manufacturer_node.text.encode("utf-8"),
-                        f_id=ParameterValue(
-                            par=b'\x00\x00\x60\x01\x01\xff\x02',
-                            value=bytes.fromhex(server_type_node.text)),
-                        f_ver=ParameterValue(
-                            par=b'\x00\x00\x00\x02\x00\xff\x02',
-                            value=cdt.OctetString(bytearray(firm_ver_node.text.encode(encoding="ascii"))).encoding)
-                    )))
+        for man_n in r_n.findall("manufacturer"):
+            for fid_n in man_n.findall("server_type"):
+                for fv_n in fid_n.findall("server_ver"):
+                    try:
+                        cols.append(cls.get_collection(collection.ID(
+                            man=man_n.text.encode("utf-8"),
+                            f_id=ParameterValue(
+                                par=b'\x00\x00\x60\x01\x01\xff\x02',
+                                value=bytes.fromhex(fid_n.text)),
+                            f_ver=ParameterValue(
+                                par=b'\x00\x00\x00\x02\x00\xff\x02',
+                                value=cdt.OctetString(bytearray(fv_n.text.encode(encoding="ascii"))).encoding)
+                        )))
+                    except AdapterException as e:
+                        logger.error(F"collection with: {man_n}/{fid_n}/{fv_n} not load to Template: {e}")
+                        continue
         for obj in r_n.findall('object'):
             ln: str = obj.attrib.get("ln", 'is absence')
             obis = cst.LogicalName.from_obis(ln)
