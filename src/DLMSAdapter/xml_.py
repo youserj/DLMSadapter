@@ -1017,23 +1017,25 @@ class Xml50(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
 
     @classmethod
     def set_parameters(cls, r_n: ET.Element, col: Collection):
-        # todo: wrong from ver3.0
-        if (dlms_ver := r_n.findtext("dlms_ver")) is not None:
-            col.set_dlms_ver(int(dlms_ver))
-        if (country := r_n.findtext("country")) is not None:
-            col.set_country(collection.CountrySpecificIdentifiers(int(country)))
-        if (country_ver_el := r_n.find("country_ver")) is not None:
-            col.set_country_ver(cls.node2parval(country_ver_el))
-        if all((
-            manufacturer := r_n.findtext("manufacturer"),
-            firm_id_el := r_n.find("firm_id"),
-            firm_ver_el := r_n.find("firm_ver")
-        )):
-            col.set_id(collection.ID(
-                man=bytes.fromhex(manufacturer),
-                f_id=cls.node2parval(firm_id_el),
-                f_ver=cls.node2parval(firm_ver_el)
-            ))
+        try:
+            if (dlms_ver := r_n.findtext("dlms_ver")) is not None:
+                col.set_dlms_ver(int(dlms_ver))
+            if (country := r_n.findtext("country")) is not None:
+                col.set_country(collection.CountrySpecificIdentifiers(int(country)))
+            if (country_ver_el := r_n.find("country_ver")) is not None:
+                col.set_country_ver(cls.node2parval(country_ver_el))
+            if all((
+                manufacturer := r_n.findtext("manufacturer"),
+                firm_id_el := r_n.find("firm_id"),
+                firm_ver_el := r_n.find("firm_ver")
+            )):
+                col.set_id(collection.ID(
+                    man=bytes.fromhex(manufacturer),
+                    f_id=cls.node2parval(firm_id_el),
+                    f_ver=cls.node2parval(firm_ver_el)
+                ))
+        except ValueError as e:
+            raise AdapterException(F"can't set all parameters to collection: {e}")
         col.spec_map = col.get_spec()
 
     @classmethod
