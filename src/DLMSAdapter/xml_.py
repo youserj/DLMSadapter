@@ -1119,7 +1119,7 @@ class Xml50(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
         root_node = cls._get_root_node(col, Xml50.TYPE_ROOT_TAG)
         objs: dict[cst.LogicalName, set[int]] = dict()
         """key: LN, value: not writable and readable container"""
-        reduce_ln = collection.ln_pattern.LNPattern("0.0.(40,42).0.0.255")
+        reduce_ln = collection.ln_pattern.LNPattern.parse("0.0.(40,42).0.0.255")
         ass: AssociationLN
         access: AttributeAccessItem
         for ass in filter(lambda it: it.logical_name.e != 0, col.get_objects_by_class_id(ClassID.ASSOCIATION_LN)):
