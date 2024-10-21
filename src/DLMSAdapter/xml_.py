@@ -708,7 +708,7 @@ class Xml41(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
         ver_path = type_path / F"{SemVer.parse(col.id.f_ver.value)}.typ"  # use
         with open(ver_path, "wb") as f:
             f.write(xml_string)
-            cls.get_manufactures_container().cache_clear()
+            cls.get_manufactures_container.cache_clear()
 
     @classmethod
     def set_data(cls, col: Collection, ass_id: int = 3) -> bool:
@@ -1183,6 +1183,7 @@ class Xml50(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
         with open(ver_path, "wb") as f:
             f.write(xml_string)
             cls.get_manufactures_container.cache_clear()
+            cls._get_collection.cache_clear()
 
     @classmethod
     def get_templates(cls) -> list[str]:
