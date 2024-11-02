@@ -550,6 +550,7 @@ class Xml40(__GetCollectionIDMixin1, Base):
     @staticmethod
     def _fill_collection40(r_n: ET.Element, col: Collection):
         """fill created collection from xml"""
+        obj_el: ObjectListElement
         attempts: iter = count(3, -1)
         """ attempts counter """
         while len(r_n) != 0 and next(attempts):
@@ -589,10 +590,12 @@ class Xml40(__GetCollectionIDMixin1, Base):
                                 raise ValueError(F'Got {attr.text} attribute Tag, expected {data_type}')
                         else:  # set common value
                             new_object.set_attr(i, bytes.fromhex(attr.text))
-                            if new_object.CLASS_ID == ClassID.ASSOCIATION_LN and i == 2:  # setup new root_node from AssociationLN.object_list
+                            if (
+                                new_object.CLASS_ID == ClassID.ASSOCIATION_LN
+                                and i == 2
+                            ):  # setup new root_node from AssociationLN.object_list
                                 for obj_el in new_object.object_list:
-                                    # obj_el: ObjectListElement
-                                    col.add_if_missing(
+                                    col.add_if_missing(                         # todo: handle no valid params
                                         class_id=obj_el.class_id,
                                         version=obj_el.version,
                                         logical_name=obj_el.logical_name)
@@ -1122,7 +1125,7 @@ class Xml50(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
         reduce_ln = collection.ln_pattern.LNPattern.parse("0.0.(40,42).0.0.255")
         ass: AssociationLN
         access: AttributeAccessItem
-        for ass in filter(lambda it: it.logical_name.e != 0, col.get_objects_by_class_id(ClassID.ASSOCIATION_LN)):
+        for ass in col.get_objects_by_class_id(ClassID.ASSOCIATION_LN):
             if ass.object_list is None:
                 logger.warning(F"for {ass} got empty <object_list>. skip it")
                 continue
@@ -1145,10 +1148,12 @@ class Xml50(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
                     ):
                         objs[obj_el.logical_name].add(i)
         o2 = list()
-        """container sort by AssociationLN first"""
+        """container sort by AssociationLN first, removing not created objects"""
         for ln in objs.keys():
-            obj = col.get_object(ln)
-            if obj.CLASS_ID == ClassID.ASSOCIATION_LN:
+            obj = col.get(ln.contents)
+            if obj is None:
+                continue
+            elif obj.CLASS_ID == ClassID.ASSOCIATION_LN:
                 o2.insert(0, obj)
             else:
                 o2.append(obj)
