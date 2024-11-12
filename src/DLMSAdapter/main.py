@@ -26,7 +26,7 @@ class Adapter(ABC):
 
     @classmethod
     @abstractmethod
-    def get_collection(cls, col_id: ID) -> Collection:
+    def get_collection(cls, col_id: ID) -> tuple[Collection, list[Exception]]:
         """get Collection by m: manufacturer, t: type, ver: version. AdapterException if not find collection by ID """
 
     @abstractmethod
@@ -39,7 +39,7 @@ class Adapter(ABC):
 
     @classmethod
     @abstractmethod
-    def set_data(cls, col: Collection, ass_id: int = 3) -> bool:
+    def set_data(cls, col: Collection, ass_id: int = 3) -> list[Exception]:
         """Save attributes WRITABLE and STATIC if possible. Use LDN as ID"""
 
     @classmethod

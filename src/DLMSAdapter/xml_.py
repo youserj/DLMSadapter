@@ -126,7 +126,7 @@ class Base(Adapter, ABC):
             col=Collection(id_=col_id))
 
     @classmethod
-    def get_collection(cls, col_id: ID) -> Collection:
+    def get_collection(cls, col_id: ID) -> tuple[Collection, list[Exception]]:
         """return copy of parent Collection"""
         return cls._get_collection(col_id).copy()
 
@@ -268,7 +268,7 @@ class Xml3(__GetCollectionIDMixin1, Base):
         raise AdapterException(F"not support <create_type> for {cls.VERSION}")
 
     @classmethod
-    def set_data(cls, col: Collection, ass_id: int = 3) -> bool:
+    def set_data(cls, col: Collection, ass_id: int = 3) -> list[Exception]:
         raise AdapterException(F"not support <keep_data> for {cls.VERSION}")
 
     @classmethod
@@ -503,7 +503,7 @@ class Xml40(__GetCollectionIDMixin1, Base):
         Xml3.set_collection(col)
 
     @classmethod
-    def set_data(cls, col: Collection, ass_id: int = 3) -> bool:
+    def set_data(cls, col: Collection, ass_id: int = 3) -> list[Exception]:
         return Xml3.set_data(col)
 
     def set_template(self, template: Template):
@@ -595,10 +595,13 @@ class Xml40(__GetCollectionIDMixin1, Base):
                                 and i == 2
                             ):  # setup new root_node from AssociationLN.object_list
                                 for obj_el in new_object.object_list:
-                                    col.add_if_missing(                         # todo: handle no valid params
-                                        class_id=obj_el.class_id,
-                                        version=obj_el.version,
-                                        logical_name=obj_el.logical_name)
+                                    try:
+                                        col.add_if_missing(                         # todo: handle no valid params
+                                            class_id=obj_el.class_id,
+                                            version=obj_el.version,
+                                            logical_name=obj_el.logical_name)
+                                    except collection.CollectionMapError as e:
+                                        logger.error(F"skip {obj_el.logical_name}: {e}")
                         obj.remove(attr)
                     except ut.UserfulTypesException as e:
                         if attr.attrib.get("forced", None):
@@ -714,10 +717,10 @@ class Xml41(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
             cls.get_manufactures_container.cache_clear()
 
     @classmethod
-    def set_data(cls, col: Collection, ass_id: int = 3) -> bool:
+    def set_data(cls, col: Collection, ass_id: int = 3) -> list[Exception]:
         path = cls._get_keep_path(col)
         root_node = cls._get_root_node(col, cls.DATA_ROOT_TAG)
-        is_empty: bool = True
+        err = list()
         parent_col = cls._get_collection(col.id)
         obj_list_el: ObjectListElement
         a_a: AttributeAccessItem
@@ -746,7 +749,7 @@ class Xml41(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
                 f.write(xml_string)
         else:
             logger.warning("nothing save. all attributes according with origin collection")
-        return not is_empty
+        return err
 
     @classmethod
     def root2data(cls, r_n: ET.Element, col: Collection):
@@ -800,7 +803,7 @@ class Xml41(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
                             f_ver=ParameterValue(
                                 par=b'\x00\x00\x00\x02\x00\xff\x02',
                                 value=cdt.OctetString(bytearray(fv_n.text.encode(encoding="ascii"))).encoding)
-                        )))
+                        ))[0])
                     except AdapterException as e:
                         logger.error(F"collection with: {man_n}/{fid_n}/{fv_n} not load to Template: {e}")
                         continue
@@ -876,7 +879,8 @@ class Xml50(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
         return col
 
     @classmethod
-    def set_data(cls, col: Collection, ass_id: int = 3) -> bool:
+    def set_data(cls, col: Collection, ass_id: int = 3) -> list[Exception]:
+        errors: list[Exception] = list()
         path = cls._get_keep_path(col)
         root_node = cls._get_root_node(col, cls.DATA_ROOT_TAG)
         is_empty: bool = True
@@ -888,19 +892,22 @@ class Xml50(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
             parent_obj = parent_col.get_object(obj_list_el.logical_name)
             object_node = None
             for a_a in obj_list_el.access_rights.attribute_access:
-                if (i := int(a_a.attribute_id)) == 1:
-                    """skip ln"""
-                elif obj.get_attr_element(i).classifier == ic.Classifier.DYNAMIC:
-                    """skip DYNAMIC attributes"""
-                elif (attr := obj.get_attr(i)) is None:
-                    """skip empty attributes"""
-                elif parent_obj.get_attr(i) == attr:
-                    """skip not changed attr value"""
-                else:
-                    is_empty = False
-                    if object_node is None:
-                        object_node = ET.SubElement(root_node, "object", attrib={'ln': obj.logical_name.get_report().msg})
-                    ET.SubElement(object_node, "attr", attrib={'index': str(i)}).text = attr.encoding.hex()
+                try:
+                    if (i := int(a_a.attribute_id)) == 1:
+                        """skip ln"""
+                    elif obj.get_attr_element(i).classifier == ic.Classifier.DYNAMIC:
+                        """skip DYNAMIC attributes"""
+                    elif (attr := obj.get_attr(i)) is None:
+                        """skip empty attributes"""
+                    elif parent_obj.get_attr(i) == attr:
+                        """skip not changed attr value"""
+                    else:
+                        is_empty = False
+                        if object_node is None:
+                            object_node = ET.SubElement(root_node, "object", attrib={'ln': obj.logical_name.get_report().msg})
+                        ET.SubElement(object_node, "attr", attrib={'index': str(i)}).text = attr.encoding.hex()
+                except exc.DLMSException as e:
+                    errors.append(e)
         if not is_empty:
             # TODO: '<!DOCTYPE ITE_util_tree SYSTEM "setting.dtd"> or xsd
             xml_string = ET.tostring(root_node, encoding="UTF-8", method="xml")
@@ -908,7 +915,7 @@ class Xml50(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
                 f.write(xml_string)
         else:
             logger.warning("nothing save. all attributes according with origin collection")
-        return not is_empty
+        return errors
 
     @staticmethod
     def get_template_node(node: ET.Element, tag: str, value: str) -> ET.Element:
@@ -966,7 +973,7 @@ class Xml50(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
                             man=bytes.fromhex(man_n.findtext("value")),
                             f_id=cls.node2parval(fid_n),
                             f_ver=cls.node2parval(fv_n),
-                        )))
+                        ))[0])
                     except AdapterException as e:
                         logger.error(F"collection with: {man_n}/{fid_n}/{fv_n} not load to Template: {e}")
                         continue
@@ -1159,12 +1166,22 @@ class Xml50(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
                 o2.append(obj)
         for obj in o2:
             object_node = ET.SubElement(root_node, "obj", attrib={'ln': str(obj.logical_name.get_report().msg)})
-            if obj.CLASS_ID == ClassID.ASSOCIATION_LN:
+            if obj.CLASS_ID == ClassID.ASSOCIATION_LN:                                          # keep Class version only for AssociationLN
                 ET.SubElement(object_node, "ver").text = str(obj.VERSION)
             v = objs[obj.logical_name]
             for i, attr in filter(lambda it: it[0] != 1, obj.get_index_with_attributes()):
                 el: ic.ICAElement = obj.get_attr_element(i)
-                if el.classifier == ic.Classifier.STATIC and ((i in v) or el.DATA_TYPE == impl.profile_generic.CaptureObjectsDisplayReadout):
+                if (
+                    el.classifier == ic.Classifier.STATIC
+                    and (
+                        (i in v)
+                        or el.DATA_TYPE == impl.profile_generic.CaptureObjectsDisplayReadout
+                        or (                                                                    # keep <client SAP>
+                            obj.CLASS_ID == ClassID.ASSOCIATION_LN
+                            and i == 3
+                        )
+                    )
+                ):
                     if attr is None:
                         logger.error(F"for {obj} attr: {i} not set, value is absense")
                     else:

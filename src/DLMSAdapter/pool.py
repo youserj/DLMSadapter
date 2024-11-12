@@ -55,7 +55,7 @@ class Pool(Adapter):
             adp.set_collection(col)
 
     @classmethod
-    def get_collection(cls, m: bytes, f_id: ParameterValue, ver: ParameterValue) -> Collection:
+    def get_collection(cls, m: bytes, f_id: ParameterValue, ver: ParameterValue) -> tuple[Collection, list[Exception]]:
         ret = None
         for adp in _adapters[GET_COLLECTION]:
             try:
