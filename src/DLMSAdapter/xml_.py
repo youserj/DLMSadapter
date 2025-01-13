@@ -881,40 +881,43 @@ class Xml50(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
     @classmethod
     def set_data(cls, col: Collection, ass_id: int = 3) -> list[Exception]:
         errors: list[Exception] = list()
-        path = cls._get_keep_path(col)
-        root_node = cls._get_root_node(col, cls.DATA_ROOT_TAG)
-        is_empty: bool = True
-        parent_col = cls._get_collection(col.id)
-        obj_list_el: ObjectListElement
-        a_a: AttributeAccessItem
-        for obj_list_el in col.getASSOCIATION(ass_id).object_list:
-            obj = col.get_object(obj_list_el.logical_name)
-            parent_obj = parent_col.get_object(obj_list_el.logical_name)
-            object_node = None
-            for a_a in obj_list_el.access_rights.attribute_access:
-                try:
-                    if (i := int(a_a.attribute_id)) == 1:
-                        """skip ln"""
-                    elif obj.get_attr_element(i).classifier == ic.Classifier.DYNAMIC:
-                        """skip DYNAMIC attributes"""
-                    elif (attr := obj.get_attr(i)) is None:
-                        """skip empty attributes"""
-                    elif parent_obj.get_attr(i) == attr:
-                        """skip not changed attr value"""
-                    else:
-                        is_empty = False
-                        if object_node is None:
-                            object_node = ET.SubElement(root_node, "object", attrib={'ln': obj.logical_name.get_report().msg})
-                        ET.SubElement(object_node, "attr", attrib={'index': str(i)}).text = attr.encoding.hex()
-                except exc.DLMSException as e:
-                    errors.append(e)
-        if not is_empty:
-            # TODO: '<!DOCTYPE ITE_util_tree SYSTEM "setting.dtd"> or xsd
-            xml_string = ET.tostring(root_node, encoding="UTF-8", method="xml")
-            with open(path, "wb") as f:
-                f.write(xml_string)
+        if (ass := col.getASSOCIATION(ass_id)) is None:
+            errors.append(exc.EmptyObj(F"Association with {ass_id=} has empty <object_list>"))
         else:
-            logger.warning("nothing save. all attributes according with origin collection")
+            a_a: AttributeAccessItem
+            obj_list_el: ObjectListElement
+            parent_col = cls._get_collection(col.id)
+            root_node = cls._get_root_node(col, cls.DATA_ROOT_TAG)
+            path = cls._get_keep_path(col)
+            is_empty: bool = True
+            for obj_list_el in ass.object_list:
+                obj = col.get_object(obj_list_el.logical_name)
+                parent_obj = parent_col.get_object(obj_list_el.logical_name)
+                object_node = None
+                for a_a in obj_list_el.access_rights.attribute_access:
+                    try:
+                        if (i := int(a_a.attribute_id)) == 1:
+                            """skip ln"""
+                        elif obj.get_attr_element(i).classifier == ic.Classifier.DYNAMIC:
+                            """skip DYNAMIC attributes"""
+                        elif (attr := obj.get_attr(i)) is None:
+                            """skip empty attributes"""
+                        elif parent_obj.get_attr(i) == attr:
+                            """skip not changed attr value"""
+                        else:
+                            is_empty = False
+                            if object_node is None:
+                                object_node = ET.SubElement(root_node, "object", attrib={'ln': obj.logical_name.get_report().msg})
+                            ET.SubElement(object_node, "attr", attrib={'index': str(i)}).text = attr.encoding.hex()
+                    except exc.DLMSException as e:
+                        errors.append(e)
+            if not is_empty:
+                # TODO: '<!DOCTYPE ITE_util_tree SYSTEM "setting.dtd"> or xsd
+                xml_string = ET.tostring(root_node, encoding="UTF-8", method="xml")
+                with open(path, "wb") as f:
+                    f.write(xml_string)
+            else:
+                logger.warning("nothing save. all attributes according with origin collection")
         return errors
 
     @staticmethod
