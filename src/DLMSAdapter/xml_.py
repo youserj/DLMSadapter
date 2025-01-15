@@ -395,9 +395,6 @@ class Xml3(__GetCollectionIDMixin1, Base):
                             case 1 | 2, data_type:
                                 raise ValueError(F'Got {attr.text} attribute Tag, expected {data_type}')
                             case _:
-                                record_time: str = attr.attrib.get('record_time')
-                                if record_time is not None:
-                                    new_object.set_record_time(indexes[-1], bytes.fromhex(record_time))
                                 new_object.set_attr(indexes[-1], bytes.fromhex(attr.text))
                         obj.remove(attr)
                     except ut.UserfulTypesException as e:
@@ -881,7 +878,7 @@ class Xml50(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
     @classmethod
     def set_data(cls, col: Collection, ass_id: int = 3) -> list[Exception]:
         errors: list[Exception] = list()
-        if (ass := col.getASSOCIATION(ass_id)) is None:
+        if (obj_list := col.getASSOCIATION(ass_id).object_list) is None:
             errors.append(exc.EmptyObj(F"Association with {ass_id=} has empty <object_list>"))
         else:
             a_a: AttributeAccessItem
@@ -890,8 +887,12 @@ class Xml50(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
             root_node = cls._get_root_node(col, cls.DATA_ROOT_TAG)
             path = cls._get_keep_path(col)
             is_empty: bool = True
-            for obj_list_el in ass.object_list:
-                obj = col.get_object(obj_list_el.logical_name)
+            for obj_list_el in obj_list:
+                try:
+                    obj = col.get_object(obj_list_el.logical_name)
+                except exc.NoObject as e:
+                    errors.append(e)
+                    continue
                 parent_obj = parent_col.get_object(obj_list_el.logical_name)
                 object_node = None
                 for a_a in obj_list_el.access_rights.attribute_access:
