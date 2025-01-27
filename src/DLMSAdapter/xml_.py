@@ -1063,13 +1063,13 @@ class Xml50(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
         elif (path := firm_id.get(bytes(col_id.f_ver))) is not None:
             logger.info(F"got collection from library by {path=}")
             return path
-        elif SemVer.is_valid((ver_ := cdt.get_instance_and_pdu_from_value(col_id.f_ver.value)[0].contents).decode("utf-8", "ignore")):
+        elif SemVer.is_valid(ver_ := cdt.get_instance_and_pdu_from_value(col_id.f_ver.value)[0].contents):
             logger.warning(F"try find compatible version...")
             semver = SemVer.parse(ver_)
             for v in firm_id.keys():
                 try:
                     data, _ = cdt.get_instance_and_pdu_from_value(ParameterValue.parse(v).value)
-                    d = data.decode()
+                    d = data.contents
                 except exc.ITEApplication as e:  # wrong parsing
                     continue
                 if (
