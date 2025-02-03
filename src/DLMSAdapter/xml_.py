@@ -835,7 +835,7 @@ class Xml41(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
                                     v1.append(list())
                                     stack.append((v1[-1], iter(v)))
                             for new_object in objs:
-                                new_object.set_attr(index, v1)
+                                new_object.parse_attr(index, v1)
                 except exc.ITEApplication as e:
                     logger.error(F"Can't fill {new_object} attr: {index}. {e}")
                 except IndexError:
@@ -1012,7 +1012,7 @@ class Xml50(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
                                     v1.append(list())
                                     stack.append((v1[-1], iter(v)))
                             for new_object in objs:
-                                new_object.set_attr(index, v1)
+                                new_object.parse_attr(index, v1)
                 except exc.ITEApplication as e:
                     logger.error(F"Can't fill {new_object} attr: {index}. {e}")
                 except IndexError:
