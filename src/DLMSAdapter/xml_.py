@@ -469,7 +469,7 @@ class Xml3(__GetCollectionIDMixin1, Base):
         raise AdapterException(F"not support <create_template> for {self.VERSION}")
 
     @classmethod
-    def get_template(cls, name: str) -> Template:
+    def get_template(cls, name: str, forced_col: Collection = None) -> Template:
         raise AdapterException(F"not support <get_template> for {cls.VERSION}")
 
 
@@ -507,7 +507,7 @@ class Xml40(__GetCollectionIDMixin1, Base):
         xml3.set_template(template)
 
     @classmethod
-    def get_template(cls, name: str) -> Template:
+    def get_template(cls, name: str, forced_col: Collection = None) -> Template:
         return Xml3.get_template(name)
 
     @classmethod
@@ -780,7 +780,7 @@ class Xml41(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
         return r_n
 
     @classmethod
-    def get_template(cls, name: str) -> Template:
+    def get_template(cls, name: str, forced_col: Collection = None) -> Template:
         path = cls._get_template_path(name)
         used: collection.UsedAttributes = dict()
         cols = list()
@@ -962,7 +962,7 @@ class Xml50(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
         )
 
     @classmethod
-    def get_template(cls, name: str) -> Template:
+    def get_template(cls, name: str, forced_col: Collection = None) -> Template:
         path = cls._get_template_path(name)
         r_n = ET.parse(path).getroot()
         used: collection.UsedAttributes = dict()
@@ -981,6 +981,12 @@ class Xml50(__GetCollectionIDMixin1, __SetTemplateMixin1, Base):
                     except AdapterException as e:
                         logger.error(F"collection with: {man_n}/{fid_n}/{fv_n} not load to Template: {e}")
                         continue
+        if len(cols) == 0:
+            if forced_col:
+                cols.append(forced_col)
+                logger.warning(F"add forced collection: {forced_col}")
+            else:
+                raise AdapterException("no one collection find")
         for obj in r_n.findall('object'):
             ln: str = obj.attrib.get("ln", 'is absence')
             obis = cst.LogicalName.from_obis(ln)

@@ -53,7 +53,7 @@ class Adapter(ABC):
 
     @classmethod
     @abstractmethod
-    def get_template(cls, name: str) -> Template:
+    def get_template(cls, name: str, forced_col: Collection = None) -> Template:
         """load template by <name>"""
 
     @classmethod
